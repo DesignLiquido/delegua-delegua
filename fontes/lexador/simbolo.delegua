@@ -1,0 +1,17 @@
+/**
+ * Classe que representa um símbolo na tabela de símbolos do compilador. 
+ * Cada símbolo tem um lexema, um tipo, uma linha onde foi declarado e um hash do arquivo onde foi declarado.
+ */
+classe Simbolo {
+    lexema: texto
+    _tipo: texto
+    linha: número
+    hashArquivo: longo
+
+    construtor(lexema: texto, _tipo: texto, linha: número, hashArquivo: longo) {
+        isto.lexema = lexema
+        isto._tipo = _tipo
+        isto.linha = linha
+        isto.hashArquivo = hashArquivo
+    }
+}

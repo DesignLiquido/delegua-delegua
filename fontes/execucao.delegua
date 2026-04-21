@@ -1,0 +1,5 @@
+importar { Lexador } de "./lexador/lexador.delegua"
+
+const lexador = Lexador()
+const resultadoLexador = lexador.mapear("var x = 10;")
+escreva(resultadoLexador)

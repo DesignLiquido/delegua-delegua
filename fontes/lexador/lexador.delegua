@@ -1,0 +1,78 @@
+importar { Simbolo } de "./simbolo.delegua"
+importar { RetornoLexador } de "./retorno-lexador.delegua"
+
+/**
+ * Classe responsável por analisar o código-fonte e produzir uma lista de símbolos (tokens) para a análise sintática.
+ */
+classe Lexador {
+    inicioSimbolo: número
+    atual: número
+    linha: número
+
+    construtor() {
+        isto.inicioSimbolo = 0
+        isto.atual = 0
+        isto.linha = 0
+    }
+
+    eDigito(c) {
+        // Verifica se o caractere é um dígito (0-9)
+        retorna c >= "0" e c <= "9";
+    }
+
+    eLetra(c) {
+        // Verifica se o caractere é uma letra (a-z, A-Z) ou underscore (_)
+        retorna (c >= "a" e c <= "z") ou (c >= "A" e c <= "Z") ou c == "_";
+    }
+
+    eAlfaNumerico(c) {
+        // Verifica se o caractere é alfanumérico (letra ou dígito)
+        retorna isto.eLetra(c) ou isto.eDigito(c);
+    }
+
+    analisarNumero(): Simbolo {
+        // Lógica para analisar um número, consumindo dígitos e possivelmente um ponto decimal
+    }
+
+    identificarPalavraChave(): Simbolo {
+        // Lógica para identificar palavras-chave ou identificadores, consumindo letras e dígitos
+    }
+
+    analisarCaractere(c: texto) {
+        escolha c {
+            caso "+":
+                retorna Simbolo(c, "ADICAO", isto.linha, isto.atual);
+            caso "-":
+                retorna Simbolo(c, "SUBTRACAO", isto.linha, isto.atual);
+            caso "*":
+                retorna Simbolo(c, "MULTIPLICACAO", isto.linha, isto.atual);
+            caso "/":
+                retorna Simbolo(c, "DIVISAO", isto.linha, isto.atual);
+            caso "\n":
+                isto.linha += 1;
+                retorna Simbolo(c, "QUEBRA_LINHA", isto.linha, isto.atual);
+            // ... outros símbolos e operadores
+            padrão:
+                se isto.eDigito(c) {
+                    // Início de um número
+                    retorna isto.analisarNumero();
+                } senão se isto.eLetra(c) {
+                    // Início de um identificador ou palavra-chave
+                    retorna isto.identificarPalavraChave();
+                } senão {
+                    // Caractere desconhecido
+                    retorna Simbolo(c, "DESCONHECIDO", isto.linha, isto.atual);
+                }
+        }
+    }
+
+    mapear(codigo: texto): RetornoLexador {
+        isto.linha = 1
+        para cada elemento em codigo {
+            // Lógica de classificação de caracteres e construção de símbolos
+            escreva(elemento)
+        }
+
+        retorna RetornoLexador([], [])
+    }
+}

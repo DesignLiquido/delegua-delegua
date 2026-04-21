@@ -1,0 +1,11 @@
+node_modules/
+dist/
+coverage/
+
+*.exe
+*.ll
+*.log
+*.o
+
+.env
+.vscode/*.code-workspace

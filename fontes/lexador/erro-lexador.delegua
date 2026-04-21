@@ -1,0 +1,9 @@
+classe ErroLexador {
+    mensagem: texto
+    linha: número
+
+    construtor(mensagem: texto, linha: número) {
+        isto.mensagem = mensagem
+        isto.linha = linha
+    }
+}
