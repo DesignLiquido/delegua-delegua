@@ -1,0 +1,9 @@
+classe Declaracao {
+    _tipo: texto
+    _valor: qualquer
+
+    construtor(_tipo: texto, _valor: qualquer) {
+        isto._tipo = _tipo
+        isto._valor = _valor
+    }
+}

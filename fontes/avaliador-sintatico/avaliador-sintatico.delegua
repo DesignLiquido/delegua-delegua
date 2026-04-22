@@ -1,0 +1,10 @@
+importar { Simbolo } de "../lexador/simbolo.delegua"
+
+classe AvaliadorSintatico {
+    analisar(simbolos: Simbolo[]) {
+        retorna {
+            declaracoes: [], // Lista de declarações ou expressões analisadas
+            erros: []
+        }
+    }
+}

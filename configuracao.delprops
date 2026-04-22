@@ -1,1 +1,2 @@
 compilacao.arquivoSaida=delegua
+compilacao.pontoEntrada=fontes/execucao.delegua

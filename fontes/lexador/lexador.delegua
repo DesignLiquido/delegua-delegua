@@ -38,7 +38,7 @@ classe Lexador {
         // Lógica para identificar palavras-chave ou identificadores, consumindo letras e dígitos
     }
 
-    analisarCaractere(c: texto) {
+    analisarCaractere(c: texto): Simbolo {
         escolha c {
             caso "+":
                 retorna Simbolo(c, "ADICAO", isto.linha, isto.atual);
@@ -66,13 +66,19 @@ classe Lexador {
         }
     }
 
+    /**
+     * Método principal para mapear o código-fonte em uma lista de símbolos (tokens).
+     */
     mapear(codigo: texto): RetornoLexador {
         isto.linha = 1
+        const retornoSimbolos: Simbolo[] = []
         para cada elemento em codigo {
             // Lógica de classificação de caracteres e construção de símbolos
             escreva(elemento)
+            const simbolo = isto.analisarCaractere(elemento)
+            retornoSimbolos.adicionar(simbolo)
         }
 
-        retorna RetornoLexador([], [])
+        retorna RetornoLexador(retornoSimbolos, [])
     }
 }
