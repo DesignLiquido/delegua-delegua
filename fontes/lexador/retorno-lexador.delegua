@@ -1,0 +1,24 @@
+importar { ErroLexador } de "./erro-lexador.delegua"
+importar { Simbolo } de "./simbolo.delegua"
+
+classe RetornoLexador {
+    simbolos: Simbolo[]
+    erros: ErroLexador[]
+
+    construtor(simbolos: Simbolo[], erros: ErroLexador[]) {
+        isto.simbolos = simbolos
+        isto.erros = erros
+    }
+
+    paraTexto(): texto {
+        var resultado: texto = "<retorno-lexador>"
+        para cada simbolo em isto.simbolos {
+            resultado = resultado + simbolo.paraTexto()
+        }
+        para cada erro em isto.erros {
+            resultado = resultado + erro.paraTexto()
+        }
+        resultado = resultado + "</retorno-lexador>"
+        retorna resultado
+    }
+}

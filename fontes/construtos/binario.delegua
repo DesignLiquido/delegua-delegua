@@ -1,0 +1,17 @@
+importar { Simbolo } de "../lexador/simbolo.delegua"
+
+classe Binario {
+    esquerda: qualquer
+    _operador: Simbolo
+    direita: qualquer
+
+    construtor(esquerda: qualquer, _operador: Simbolo, direita: qualquer) {
+        isto.esquerda = esquerda
+        isto._operador = _operador
+        isto.direita = direita
+    }
+
+    paraTexto(): texto {
+        retorna "<binario />"
+    }
+}

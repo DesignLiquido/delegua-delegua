@@ -1,0 +1,13 @@
+classe Elvis {
+    esquerda: qualquer
+    direita: qualquer
+
+    construtor(esquerda: qualquer, direita: qualquer) {
+        isto.esquerda = esquerda
+        isto.direita = direita
+    }
+
+    paraTexto(): texto {
+        retorna "<elvis />"
+    }
+}

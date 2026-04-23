@@ -1,0 +1,13 @@
+classe Chamada {
+    entidadeChamada: qualquer
+    argumentos: qualquer[]
+
+    construtor(entidadeChamada: qualquer, argumentos: qualquer[]) {
+        isto.entidadeChamada = entidadeChamada
+        isto.argumentos = argumentos
+    }
+
+    paraTexto(): texto {
+        retorna "<chamada />"
+    }
+}

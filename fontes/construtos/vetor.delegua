@@ -1,0 +1,11 @@
+classe Vetor {
+    valores: qualquer[]
+
+    construtor(valores: qualquer[]) {
+        isto.valores = valores
+    }
+
+    paraTexto(): texto {
+        retorna "<vetor />"
+    }
+}

@@ -1,0 +1,11 @@
+classe Literal {
+    valor: qualquer
+
+    construtor(valor: qualquer) {
+        isto.valor = valor
+    }
+
+    paraTexto(): texto {
+        retorna "<literal />"
+    }
+}

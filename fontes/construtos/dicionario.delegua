@@ -1,0 +1,13 @@
+classe Dicionario {
+    chaves: qualquer[]
+    valores: qualquer[]
+
+    construtor(chaves: qualquer[], valores: qualquer[]) {
+        isto.chaves = chaves
+        isto.valores = valores
+    }
+
+    paraTexto(): texto {
+        retorna "<dicionario />"
+    }
+}

@@ -1,0 +1,15 @@
+importar { Simbolo } de "../lexador/simbolo.delegua"
+
+classe AcessoMetodoOuPropriedade {
+    objeto: qualquer
+    simbolo: Simbolo
+
+    construtor(objeto: qualquer, simbolo: Simbolo) {
+        isto.objeto = objeto
+        isto.simbolo = simbolo
+    }
+
+    paraTexto(): texto {
+        retorna "<acesso-metodo-ou-propriedade />"
+    }
+}

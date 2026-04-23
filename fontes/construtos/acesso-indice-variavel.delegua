@@ -1,0 +1,17 @@
+importar { Simbolo } de "../lexador/simbolo.delegua"
+
+classe AcessoIndiceVariavel {
+    entidadeChamada: qualquer
+    indice: qualquer
+    simboloFechamento: Simbolo
+
+    construtor(entidadeChamada: qualquer, indice: qualquer, simboloFechamento: Simbolo) {
+        isto.entidadeChamada = entidadeChamada
+        isto.indice = indice
+        isto.simboloFechamento = simboloFechamento
+    }
+
+    paraTexto(): texto {
+        retorna "<acesso-indice-variavel />"
+    }
+}

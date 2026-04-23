@@ -1,0 +1,93 @@
+classe TiposSimbolos {
+    ADICAO: texto
+    SUBTRACAO: texto
+    MULTIPLICACAO: texto
+    DIVISAO: texto
+    DIVISAO_INTEIRA: texto
+    MODULO: texto
+    EXPONENCIACAO: texto
+    INCREMENTAR: texto
+    DECREMENTAR: texto
+    IDENTIFICADOR: texto
+    NUMERO: texto
+    TEXTO: texto
+    VERDADEIRO: texto
+    FALSO: texto
+    NULO: texto
+    PONTO: texto
+    VIRGULA: texto
+    PARENTESE_ESQUERDO: texto
+    PARENTESE_DIREITO: texto
+    COLCHETE_ESQUERDO: texto
+    COLCHETE_DIREITO: texto
+    CHAVE_ESQUERDA: texto
+    CHAVE_DIREITA: texto
+    MAIOR: texto
+    MAIOR_IGUAL: texto
+    MAIOR_MAIOR: texto
+    MENOR: texto
+    MENOR_IGUAL: texto
+    MENOR_MENOR: texto
+    IGUAL_IGUAL: texto
+    DIFERENTE: texto
+    BIT_AND: texto
+    BIT_OR: texto
+    BIT_XOR: texto
+    BIT_NOT: texto
+    E: texto
+    OU: texto
+    EM: texto
+    NEGACAO: texto
+    NAO: texto
+    DOIS_PONTOS: texto
+    ELVIS: texto
+    INTERROGACAO: texto
+    EOF: texto
+
+    construtor() {
+        isto.ADICAO = "ADICAO"
+        isto.SUBTRACAO = "SUBTRACAO"
+        isto.MULTIPLICACAO = "MULTIPLICACAO"
+        isto.DIVISAO = "DIVISAO"
+        isto.DIVISAO_INTEIRA = "DIVISAO_INTEIRA"
+        isto.MODULO = "MODULO"
+        isto.EXPONENCIACAO = "EXPONENCIACAO"
+        isto.INCREMENTAR = "INCREMENTAR"
+        isto.DECREMENTAR = "DECREMENTAR"
+        isto.IDENTIFICADOR = "IDENTIFICADOR"
+        isto.NUMERO = "NUMERO"
+        isto.TEXTO = "TEXTO"
+        isto.VERDADEIRO = "VERDADEIRO"
+        isto.FALSO = "FALSO"
+        isto.NULO = "NULO"
+        isto.PONTO = "PONTO"
+        isto.VIRGULA = "VIRGULA"
+        isto.PARENTESE_ESQUERDO = "PARENTESE_ESQUERDO"
+        isto.PARENTESE_DIREITO = "PARENTESE_DIREITO"
+        isto.COLCHETE_ESQUERDO = "COLCHETE_ESQUERDO"
+        isto.COLCHETE_DIREITO = "COLCHETE_DIREITO"
+        isto.CHAVE_ESQUERDA = "CHAVE_ESQUERDA"
+        isto.CHAVE_DIREITA = "CHAVE_DIREITA"
+        isto.MAIOR = "MAIOR"
+        isto.MAIOR_IGUAL = "MAIOR_IGUAL"
+        isto.MAIOR_MAIOR = "MAIOR_MAIOR"
+        isto.MENOR = "MENOR"
+        isto.MENOR_IGUAL = "MENOR_IGUAL"
+        isto.MENOR_MENOR = "MENOR_MENOR"
+        isto.IGUAL_IGUAL = "IGUAL_IGUAL"
+        isto.DIFERENTE = "DIFERENTE"
+        isto.BIT_AND = "BIT_AND"
+        isto.BIT_OR = "BIT_OR"
+        isto.BIT_XOR = "BIT_XOR"
+        isto.BIT_NOT = "BIT_NOT"
+        isto.E = "E"
+        isto.OU = "OU"
+        isto.EM = "EM"
+        isto.NEGACAO = "NEGACAO"
+        isto.NAO = "NAO"
+        isto.DOIS_PONTOS = "DOIS_PONTOS"
+        isto.ELVIS = "ELVIS"
+        isto.INTERROGACAO = "INTERROGACAO"
+        isto.EOF = "EOF"
+    }
+}

@@ -14,4 +14,10 @@ classe Simbolo {
         isto.linha = linha
         isto.hashArquivo = hashArquivo
     }
+
+    paraTexto(): texto {
+        var lexema: texto = isto.lexema
+        var tipoResolvido: texto = isto._tipo
+        retorna "<simbolo lexema=${lexema} tipo=${tipoResolvido} />"
+    }
 }

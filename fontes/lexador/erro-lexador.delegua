@@ -6,4 +6,9 @@ classe ErroLexador {
         isto.mensagem = mensagem
         isto.linha = linha
     }
+
+    paraTexto(): texto {
+        var mensagem: texto = isto.mensagem
+        retorna "<erro-lexador mensagem=${mensagem} />"
+    }
 }

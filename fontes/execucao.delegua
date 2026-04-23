@@ -1,5 +1,6 @@
-importar { Lexador } de "./lexador/lexador.delegua"
+importar { MicroLexador } de "./lexador/micro-lexador.delegua"
+importar { RetornoLexador } de "./lexador/retorno-lexador.delegua"
 
-const lexador = Lexador()
-const resultadoLexador = lexador.mapear("var x = 10;")
-escreva(resultadoLexador)
+var lexador: MicroLexador = MicroLexador()
+var resultado: RetornoLexador = lexador.mapear("x + 1")
+escreva(resultado.paraTexto())

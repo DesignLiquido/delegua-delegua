@@ -1,0 +1,14 @@
+importar { Simbolo } de "../lexador/simbolo.delegua"
+
+classe Variavel {
+    simbolo: Simbolo
+
+    construtor(simbolo: Simbolo) {
+        isto.simbolo = simbolo
+    }
+
+    paraTexto(): texto {
+        var lexema: texto = isto.simbolo.lexema
+        retorna "<variavel lexema=${lexema} />"
+    }
+}

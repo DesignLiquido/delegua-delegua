@@ -1,0 +1,11 @@
+classe Agrupamento {
+    expressao: qualquer
+
+    construtor(expressao: qualquer) {
+        isto.expressao = expressao
+    }
+
+    paraTexto(): texto {
+        retorna "<agrupamento />"
+    }
+}

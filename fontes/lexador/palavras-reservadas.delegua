@@ -1,0 +1,28 @@
+importar { TiposSimbolos } de "./tipos-simbolos.delegua"
+
+classe PalavrasReservadas {
+    tipos: TiposSimbolos
+
+    construtor() {
+        isto.tipos = TiposSimbolos()
+    }
+
+    buscar(palavra: texto): texto {
+        escolha palavra {
+            caso "e":
+                retorna isto.tipos.E
+            caso "em":
+                retorna isto.tipos.EM
+            caso "falso":
+                retorna isto.tipos.FALSO
+            caso "nulo":
+                retorna isto.tipos.NULO
+            caso "ou":
+                retorna isto.tipos.OU
+            caso "verdadeiro":
+                retorna isto.tipos.VERDADEIRO
+            padrão:
+                retorna isto.tipos.IDENTIFICADOR
+        }
+    }
+}
