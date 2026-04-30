@@ -1,6 +1,18 @@
 importar { Simbolo } de "../lexador/simbolo.delegua"
 
 classe AvaliadorSintatico {
+    simbolos: Simbolo[]
+    erros: ErroAvaliadorSintatico[]
+    atual: inteiro
+    linha: inteiro
+
+    construtor() {
+        isto.simbolos = []
+        isto.erros = []
+        isto.atual = 0
+        isto.linha = 1
+    }
+
     analisar(simbolos: Simbolo[]) {
         retorna {
             declaracoes: [], // Lista de declarações ou expressões analisadas

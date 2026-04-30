@@ -1,84 +1,476 @@
 importar { Simbolo } de "./simbolo.delegua"
+importar { ErroLexador } de "./erro-lexador.delegua"
 importar { RetornoLexador } de "./retorno-lexador.delegua"
+importar { TiposSimbolos } de "./tipos-simbolos.delegua"
+importar { PalavrasReservadas } de "./palavras-reservadas.delegua"
 
 /**
- * Classe responsável por analisar o código-fonte e produzir uma lista de símbolos (tokens) para a análise sintática.
+ * O Lexador é responsável por transformar o código em uma coleção de tokens de linguagem.
+ * Cada token de linguagem é representado por um tipo, um lexema e informações da linha de código em que foi expresso.
  */
 classe Lexador {
-    inicioSimbolo: número
-    atual: número
-    linha: número
+    simbolos: Simbolo[]
+    erros: ErroLexador[]
+    inicioSimbolo: inteiro
+    atual: inteiro
+    linha: inteiro
+    codigo: texto
+    hashArquivo: inteiro
+    tipos: TiposSimbolos
+    palavrasReservadas: PalavrasReservadas
 
     construtor() {
+        isto.tipos = TiposSimbolos()
+        isto.palavrasReservadas = PalavrasReservadas()
+        isto.simbolos = []
+        isto.erros = []
         isto.inicioSimbolo = 0
         isto.atual = 0
         isto.linha = 0
+        isto.codigo = ""
+        isto.hashArquivo = -1
     }
 
-    eDigito(c) {
-        // Verifica se o caractere é um dígito (0-9)
-        retorna c >= "0" e c <= "9";
+    eDigito(caractere: texto): lógico {
+        retorna caractere >= "0" e caractere <= "9"
     }
 
-    eLetra(c) {
-        // Verifica se o caractere é uma letra (a-z, A-Z) ou underscore (_)
-        retorna (c >= "a" e c <= "z") ou (c >= "A" e c <= "Z") ou c == "_";
+    eAlfabeto(caractere: texto): lógico {
+        var acentuacoes: texto[] = ["á", "Á", "ã", "Ã", "â", "Â", "à", "À", "é", "É", "ê", "Ê", "í", "Í", "ó", "Ó", "õ", "Õ", "ô", "Ô", "ú", "Ú", "ç", "Ç", "_"]
+        retorna (caractere >= "a" e caractere <= "z") ou (caractere >= "A" e caractere <= "Z") ou acentuacoes.inclui(caractere)
     }
 
-    eAlfaNumerico(c) {
-        // Verifica se o caractere é alfanumérico (letra ou dígito)
-        retorna isto.eLetra(c) ou isto.eDigito(c);
+    eAlfabetoOuDigito(caractere: texto): lógico {
+        retorna isto.eDigito(caractere) ou isto.eAlfabeto(caractere)
     }
 
-    analisarNumero(): Simbolo {
-        // Lógica para analisar um número, consumindo dígitos e possivelmente um ponto decimal
+    eHexDigito(caractere: texto): lógico {
+        retorna (caractere >= "0" e caractere <= "9") ou (caractere >= "a" e caractere <= "f") ou (caractere >= "A" e caractere <= "F")
     }
 
-    identificarPalavraChave(): Simbolo {
-        // Lógica para identificar palavras-chave ou identificadores, consumindo letras e dígitos
+    eBinarioDigito(caractere: texto): lógico {
+        retorna caractere == "0" ou caractere == "1"
     }
 
-    analisarCaractere(c: texto): Simbolo {
-        escolha c {
-            caso "+":
-                retorna Simbolo(c, "ADICAO", isto.linha, isto.atual);
-            caso "-":
-                retorna Simbolo(c, "SUBTRACAO", isto.linha, isto.atual);
-            caso "*":
-                retorna Simbolo(c, "MULTIPLICACAO", isto.linha, isto.atual);
-            caso "/":
-                retorna Simbolo(c, "DIVISAO", isto.linha, isto.atual);
-            caso "\n":
-                isto.linha += 1;
-                retorna Simbolo(c, "QUEBRA_LINHA", isto.linha, isto.atual);
-            // ... outros símbolos e operadores
-            padrão:
-                se isto.eDigito(c) {
-                    // Início de um número
-                    retorna isto.analisarNumero();
-                } senão se isto.eLetra(c) {
-                    // Início de um identificador ou palavra-chave
-                    retorna isto.identificarPalavraChave();
+    eOctalDigito(caractere: texto): lógico {
+        retorna caractere >= "0" e caractere <= "7"
+    }
+
+    eFinalDoCodigo(): lógico {
+        retorna isto.atual >= isto.codigo.tamanho()
+    }
+
+    simboloAtual(): texto {
+        se isto.eFinalDoCodigo() {
+            retorna ""
+        }
+        retorna isto.codigo[isto.atual]
+    }
+
+    proximoSimbolo(): texto {
+        var prox: inteiro = isto.atual + 1
+        se prox >= isto.codigo.tamanho() {
+            retorna ""
+        }
+        retorna isto.codigo[prox]
+    }
+
+    simboloAnterior(): texto {
+        se isto.atual <= 0 {
+            retorna ""
+        }
+        retorna isto.codigo[isto.atual - 1]
+    }
+
+    avancar(): vazio {
+        se nao isto.eFinalDoCodigo() e isto.codigo[isto.atual] == "\n" {
+            isto.linha = isto.linha + 1
+        }
+        isto.atual = isto.atual + 1
+    }
+
+    adicionarSimbolo(tipoSimbolo: texto, lexema: texto): nulo {
+        var trecho: texto = isto.codigo.subtexto(isto.inicioSimbolo, isto.atual)
+        var lexemaFinal: texto = lexema
+        se lexema == "" {
+            lexemaFinal = trecho
+        }
+        var novoSimbolo: Simbolo = Simbolo(lexemaFinal, tipoSimbolo, isto.linha + 1, isto.hashArquivo)
+        isto.simbolos.adicionar(novoSimbolo)
+    }
+
+    comentarioUmaLinha(): nulo {
+        var linhaInicio: inteiro = isto.linha
+        enquanto nao isto.eFinalDoCodigo() e isto.linha == linhaInicio {
+            isto.avancar()
+        }
+        var conteudo: texto = isto.codigo.subtexto(isto.inicioSimbolo + 2, isto.atual)
+        isto.adicionarSimbolo(isto.tipos.COMENTARIO, conteudo)
+    }
+
+    comentarioMultilinha(): nulo {
+        enquanto nao isto.eFinalDoCodigo() {
+            isto.avancar()
+            se isto.simboloAtual() == "*" e isto.proximoSimbolo() == "/" {
+                isto.avancar()
+                isto.avancar()
+                retorna
+            }
+        }
+        var novoErro: ErroLexador = ErroLexador("Comentário de múltiplas linhas não finalizado.", isto.linha + 1)
+        isto.erros.adicionar(novoErro)
+    }
+
+    analisarTexto(delimitador: texto): nulo {
+        var valor: texto = ""
+        enquanto nao isto.eFinalDoCodigo() {
+            var caractere: texto = isto.simboloAtual()
+
+            se caractere == delimitador {
+                isto.avancar()
+                isto.adicionarSimbolo(isto.tipos.TEXTO, valor)
+                retorna
+            }
+
+            se caractere == "\n" {
+                valor = valor + "\n"
+                isto.avancar()
+            } senão se caractere == "\\" {
+                isto.avancar()
+                var proximo: texto = isto.simboloAtual()
+                escolha proximo {
+                    caso "n":
+                        valor = valor + "\n"
+                        isto.avancar()
+                    caso "t":
+                        valor = valor + "\t"
+                        isto.avancar()
+                    caso "r":
+                        valor = valor + "\r"
+                        isto.avancar()
+                    caso "b":
+                        valor = valor + "\b"
+                        isto.avancar()
+                    caso "'":
+                        valor = valor + "'"
+                        isto.avancar()
+                    caso "\"":
+                        valor = valor + "\""
+                        isto.avancar()
+                    caso "\\":
+                        valor = valor + "\\"
+                        isto.avancar()
+                    padrão:
+                        valor = valor + "\\" + proximo
+                        isto.avancar()
+                }
+            } senão {
+                valor = valor + caractere
+                isto.avancar()
+            }
+        }
+
+        var novoErro: ErroLexador = ErroLexador("Texto não finalizado.", isto.linha + 1)
+        isto.erros.adicionar(novoErro)
+    }
+
+    analisarHexadecimal(): nulo {
+        isto.avancar()
+        isto.avancar()
+        enquanto isto.eHexDigito(isto.simboloAtual()) {
+            isto.avancar()
+        }
+        var hexTexto: texto = isto.codigo.subtexto(isto.inicioSimbolo, isto.atual)
+        isto.adicionarSimbolo(isto.tipos.NUMERO, hexTexto)
+    }
+
+    analisarBinario(): nulo {
+        isto.avancar()
+        isto.avancar()
+        enquanto isto.eBinarioDigito(isto.simboloAtual()) {
+            isto.avancar()
+        }
+        var binTexto: texto = isto.codigo.subtexto(isto.inicioSimbolo, isto.atual)
+        isto.adicionarSimbolo(isto.tipos.NUMERO, binTexto)
+    }
+
+    analisarOctal(): nulo {
+        isto.avancar()
+        isto.avancar()
+        enquanto isto.eOctalDigito(isto.simboloAtual()) {
+            isto.avancar()
+        }
+        var octTexto: texto = isto.codigo.subtexto(isto.inicioSimbolo, isto.atual)
+        isto.adicionarSimbolo(isto.tipos.NUMERO, octTexto)
+    }
+
+    analisarNumero(): nulo {
+        se isto.simboloAtual() == "0" {
+            var proximo: texto = isto.proximoSimbolo()
+            se proximo == "x" ou proximo == "X" {
+                isto.analisarHexadecimal()
+                retorna
+            }
+            se proximo == "b" ou proximo == "B" {
+                isto.analisarBinario()
+                retorna
+            }
+            se proximo == "o" ou proximo == "O" {
+                isto.analisarOctal()
+                retorna
+            }
+        }
+
+        enquanto isto.eDigito(isto.simboloAtual()) {
+            isto.avancar()
+        }
+
+        se isto.simboloAtual() == "." e isto.eDigito(isto.proximoSimbolo()) {
+            isto.avancar()
+            enquanto isto.eDigito(isto.simboloAtual()) {
+                isto.avancar()
+            }
+        }
+
+        var numeroCompleto: texto = isto.codigo.subtexto(isto.inicioSimbolo, isto.atual)
+        isto.adicionarSimbolo(isto.tipos.NUMERO, numeroCompleto)
+    }
+
+    identificarPalavraChave(): nulo {
+        enquanto isto.eAlfabetoOuDigito(isto.simboloAtual()) {
+            isto.avancar()
+        }
+        var palavra: texto = isto.codigo.subtexto(isto.inicioSimbolo, isto.atual)
+        var tipoToken: texto = isto.palavrasReservadas.buscar(palavra)
+        isto.adicionarSimbolo(tipoToken, "")
+        retorna
+    }
+
+    analisarToken(): nulo {
+        var caractere: texto = isto.simboloAtual()
+
+        escolha caractere {
+            caso "@":
+                isto.adicionarSimbolo(isto.tipos.ARROBA, "@")
+                isto.avancar()
+            caso "[":
+                isto.adicionarSimbolo(isto.tipos.COLCHETE_ESQUERDO, "[")
+                isto.avancar()
+            caso "]":
+                isto.adicionarSimbolo(isto.tipos.COLCHETE_DIREITO, "]")
+                isto.avancar()
+            caso "(":
+                isto.adicionarSimbolo(isto.tipos.PARENTESE_ESQUERDO, "(")
+                isto.avancar()
+            caso ")":
+                isto.adicionarSimbolo(isto.tipos.PARENTESE_DIREITO, ")")
+                isto.avancar()
+            caso "{":
+                isto.adicionarSimbolo(isto.tipos.CHAVE_ESQUERDA, "{")
+                isto.avancar()
+            caso "}":
+                isto.adicionarSimbolo(isto.tipos.CHAVE_DIREITA, "}")
+                isto.avancar()
+            caso ",":
+                isto.adicionarSimbolo(isto.tipos.VIRGULA, ",")
+                isto.avancar()
+            caso ":":
+                isto.adicionarSimbolo(isto.tipos.DOIS_PONTOS, ":")
+                isto.avancar()
+            caso ";":
+                isto.adicionarSimbolo(isto.tipos.PONTO_E_VIRGULA, ";")
+                isto.avancar()
+            caso "~":
+                isto.adicionarSimbolo(isto.tipos.BIT_NOT, "~")
+                isto.avancar()
+            caso "&":
+                isto.adicionarSimbolo(isto.tipos.BIT_AND, "&")
+                isto.avancar()
+            caso "^":
+                isto.adicionarSimbolo(isto.tipos.CIRCUMFLEXO, "^")
+                isto.avancar()
+            caso ".":
+                isto.inicioSimbolo = isto.atual
+                isto.avancar()
+                se isto.simboloAtual() == "." {
+                    isto.avancar()
+                    se isto.simboloAtual() == "." {
+                        isto.avancar()
+                        isto.adicionarSimbolo(isto.tipos.RETICENCIAS, "...")
+                    } senão {
+                        var novoErro: ErroLexador = ErroLexador("Esperado ou apenas um ponto, ou três pontos em sequência.", isto.linha + 1)
+                        isto.erros.adicionar(novoErro)
+                        isto.adicionarSimbolo(isto.tipos.PONTO, ".")
+                    }
                 } senão {
-                    // Caractere desconhecido
-                    retorna Simbolo(c, "DESCONHECIDO", isto.linha, isto.atual);
+                    isto.adicionarSimbolo(isto.tipos.PONTO, ".")
+                }
+            caso "-":
+                isto.inicioSimbolo = isto.atual
+                isto.avancar()
+                se isto.simboloAtual() == "=" {
+                    isto.avancar()
+                    isto.adicionarSimbolo(isto.tipos.MENOS_IGUAL, "-=")
+                } senão se isto.simboloAtual() == "-" {
+                    isto.avancar()
+                    isto.adicionarSimbolo(isto.tipos.DECREMENTAR, "--")
+                } senão {
+                    isto.adicionarSimbolo(isto.tipos.SUBTRACAO, "")
+                }
+            caso "+":
+                isto.inicioSimbolo = isto.atual
+                isto.avancar()
+                se isto.simboloAtual() == "=" {
+                    isto.avancar()
+                    isto.adicionarSimbolo(isto.tipos.MAIS_IGUAL, "+=")
+                } senão se isto.simboloAtual() == "+" {
+                    isto.avancar()
+                    isto.adicionarSimbolo(isto.tipos.INCREMENTAR, "++")
+                } senão {
+                    isto.adicionarSimbolo(isto.tipos.ADICAO, "")
+                }
+            caso "%":
+                isto.inicioSimbolo = isto.atual
+                isto.avancar()
+                se isto.simboloAtual() == "=" {
+                    isto.avancar()
+                    isto.adicionarSimbolo(isto.tipos.MODULO_IGUAL, "%=")
+                } senão {
+                    isto.adicionarSimbolo(isto.tipos.MODULO, "")
+                }
+            caso "*":
+                isto.inicioSimbolo = isto.atual
+                isto.avancar()
+                se isto.simboloAtual() == "*" {
+                    isto.avancar()
+                    isto.adicionarSimbolo(isto.tipos.EXPONENCIACAO, "**")
+                } senão se isto.simboloAtual() == "=" {
+                    isto.avancar()
+                    isto.adicionarSimbolo(isto.tipos.MULTIPLICACAO_IGUAL, "*=")
+                } senão {
+                    isto.adicionarSimbolo(isto.tipos.MULTIPLICACAO, "")
+                }
+            caso "!":
+                isto.avancar()
+                se isto.simboloAtual() == "=" {
+                    isto.avancar()
+                    isto.adicionarSimbolo(isto.tipos.DIFERENTE, "!=")
+                } senão {
+                    isto.adicionarSimbolo(isto.tipos.NEGACAO, "")
+                }
+            caso "=":
+                isto.avancar()
+                se isto.simboloAtual() == "=" {
+                    isto.avancar()
+                    isto.adicionarSimbolo(isto.tipos.IGUAL_IGUAL, "==")
+                } senão {
+                    isto.adicionarSimbolo(isto.tipos.IGUAL, "")
+                }
+            caso "|":
+                isto.avancar()
+                se isto.simboloAtual() == "|" {
+                    isto.avancar()
+                    isto.adicionarSimbolo(isto.tipos.EXPRESSAO_REGULAR, "||")
+                } senão {
+                    isto.adicionarSimbolo(isto.tipos.BIT_OR, "")
+                }
+            caso "<":
+                isto.avancar()
+                se isto.simboloAtual() == "=" {
+                    isto.avancar()
+                    isto.adicionarSimbolo(isto.tipos.MENOR_IGUAL, "<=")
+                } senão se isto.simboloAtual() == "<" {
+                    isto.avancar()
+                    isto.adicionarSimbolo(isto.tipos.MENOR_MENOR, "<<")
+                } senão se isto.simboloAtual() == "-" {
+                    isto.avancar()
+                    isto.adicionarSimbolo(isto.tipos.SETA_ESQUERDA, "<-")
+                } senão {
+                    isto.adicionarSimbolo(isto.tipos.MENOR, "")
+                }
+            caso ">":
+                isto.avancar()
+                se isto.simboloAtual() == "=" {
+                    isto.avancar()
+                    isto.adicionarSimbolo(isto.tipos.MAIOR_IGUAL, ">=")
+                } senão se isto.simboloAtual() == ">" {
+                    isto.avancar()
+                    isto.adicionarSimbolo(isto.tipos.MAIOR_MAIOR, ">>")
+                } senão {
+                    isto.adicionarSimbolo(isto.tipos.MAIOR, "")
+                }
+            caso "/":
+                isto.avancar()
+                se isto.simboloAtual() == "/" {
+                    isto.avancar()
+                    isto.comentarioUmaLinha()
+                } senão se isto.simboloAtual() == "*" {
+                    isto.avancar()
+                    isto.comentarioMultilinha()
+                } senão se isto.simboloAtual() == "=" {
+                    isto.avancar()
+                    isto.adicionarSimbolo(isto.tipos.DIVISAO_IGUAL, "/=")
+                } senão {
+                    isto.adicionarSimbolo(isto.tipos.DIVISAO, "")
+                }
+            caso "\\":
+                isto.inicioSimbolo = isto.atual
+                isto.avancar()
+                se isto.simboloAtual() == "=" {
+                    isto.avancar()
+                    isto.adicionarSimbolo(isto.tipos.DIVISAO_INTEIRA_IGUAL, "\\=")
+                } senão {
+                    isto.adicionarSimbolo(isto.tipos.DIVISAO_INTEIRA, "")
+                }
+            caso "?":
+                isto.avancar()
+                se isto.simboloAtual() == ":" {
+                    isto.avancar()
+                    isto.adicionarSimbolo(isto.tipos.ELVIS, "?:")
+                } senão {
+                    isto.adicionarSimbolo(isto.tipos.INTERROGACAO, "")
+                }
+            caso " ":
+                isto.avancar()
+            caso "\r":
+                isto.avancar()
+            caso "\t":
+                isto.avancar()
+            caso "\n":
+                isto.avancar()
+            caso "\"":
+                isto.avancar()
+                isto.analisarTexto("\"")
+            caso "'":
+                isto.avancar()
+                isto.analisarTexto("'")
+            padrão:
+                se isto.eDigito(caractere) {
+                    isto.analisarNumero()
+                } senão se isto.eAlfabeto(caractere) {
+                    isto.identificarPalavraChave()
+                } senão {
+                    var novoErro: ErroLexador = ErroLexador("Caractere inesperado.", isto.linha + 1)
+                    isto.erros.adicionar(novoErro)
+                    isto.avancar()
                 }
         }
     }
 
-    /**
-     * Método principal para mapear o código-fonte em uma lista de símbolos (tokens).
-     */
-    mapear(codigo: texto): RetornoLexador {
-        isto.linha = 1
-        const retornoSimbolos: Simbolo[] = []
-        para cada elemento em codigo {
-            // Lógica de classificação de caracteres e construção de símbolos
-            escreva(elemento)
-            const simbolo = isto.analisarCaractere(elemento)
-            retornoSimbolos.adicionar(simbolo)
+    mapear(codigoFonte: texto, hashArquivo: inteiro): RetornoLexador {
+        isto.erros = []
+        isto.simbolos = []
+        isto.inicioSimbolo = 0
+        isto.atual = 0
+        isto.linha = 0
+        isto.codigo = codigoFonte
+        isto.hashArquivo = hashArquivo
+
+        enquanto !isto.eFinalDoCodigo() {
+            isto.inicioSimbolo = isto.atual
+            isto.analisarToken()
         }
 
-        retorna RetornoLexador(retornoSimbolos, [])
+        retorna RetornoLexador(isto.simbolos, isto.erros)
     }
 }

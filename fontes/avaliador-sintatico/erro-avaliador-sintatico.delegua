@@ -1,0 +1,16 @@
+importar { Simbolo } de "../lexador/simbolo.delegua"
+
+classe ErroAvaliadorSintatico {
+    simbolo: Simbolo
+    mensagem: texto
+
+    construtor(simbolo: Simbolo, mensagem: texto) {
+        isto.simbolo = simbolo
+        isto.mensagem = mensagem
+    }
+
+    paraTexto(): texto {
+        var mensagem: texto = isto.mensagem
+        retorna "<erro-avaliador-sintatico mensagem=${mensagem} />"
+    }
+}

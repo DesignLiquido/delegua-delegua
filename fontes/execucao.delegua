@@ -2,5 +2,5 @@ importar { MicroLexador } de "./lexador/micro-lexador.delegua"
 importar { RetornoLexador } de "./lexador/retorno-lexador.delegua"
 
 var lexador: MicroLexador = MicroLexador()
-var resultado: RetornoLexador = lexador.mapear("x + 1")
+var resultado: RetornoLexador = lexador.mapear("escreva('Olá, mundo!')")
 escreva(resultado.paraTexto())

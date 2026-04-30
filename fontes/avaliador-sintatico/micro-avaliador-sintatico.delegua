@@ -1,20 +1,9 @@
 importar { Simbolo } de "../lexador/simbolo.delegua"
-importar { RetornoLexador } de "../lexador/retorno-lexador.delegua"
-importar { RetornoAvaliadorSintatico } de "./retorno-avaliador-sintatico.delegua"
-importar { TiposSimbolos } de "../lexador/tipos-simbolos.delegua"
 importar { ErroAvaliadorSintatico } de "./erro-avaliador-sintatico.delegua"
-importar { Literal } de "../construtos/literal.delegua"
-importar { Variavel } de "../construtos/variavel.delegua"
-importar { Unario } de "../construtos/unario.delegua"
 importar { Binario } de "../construtos/binario.delegua"
 importar { Logico } de "../construtos/logico.delegua"
-importar { Agrupamento } de "../construtos/agrupamento.delegua"
-importar { AcessoMetodoOuPropriedade } de "../construtos/acesso-metodo-ou-propriedade.delegua"
-importar { AcessoIndiceVariavel } de "../construtos/acesso-indice-variavel.delegua"
-importar { Chamada } de "../construtos/chamada.delegua"
-importar { Dicionario } de "../construtos/dicionario.delegua"
-importar { Vetor } de "../construtos/vetor.delegua"
-importar { Elvis } de "../construtos/elvis.delegua"
+importar { Unario } de "../construtos/unario.delegua"
+importar { TiposSimbolos } de "../lexador/tipos-simbolos.delegua"
 
 classe MicroAvaliadorSintatico {
     simbolos: Simbolo[]
@@ -90,143 +79,15 @@ classe MicroAvaliadorSintatico {
         retorna isto.simbolos[isto.atual]
     }
 
-    eFinalDosSimbolos(): lógico {
-        retorna isto.atual >= isto.simbolos.tamanho()
-    }
-
-    primario(): qualquer {
-        var simboloAtual: Simbolo = isto.simbolos[isto.atual]
-        var tipoAtual: texto = simboloAtual._tipo
-        var chaves: qualquer[] = []
-        var valores: qualquer[] = []
-
-        se tipoAtual == isto.tipos.CHAVE_ESQUERDA {
-            isto.avancarEDevolverAnterior()
-            chaves = []
-            valores = []
-
-            se isto.verificarSeSimboloAtualEIgualA(isto.tipos.CHAVE_DIREITA) {
-                retorna Dicionario(chaves, valores)
-            }
-
-            enquanto nao isto.verificarSeSimboloAtualEIgualA(isto.tipos.CHAVE_DIREITA) {
-                var chave: qualquer = isto.declaracao()
-                isto.consumir(isto.tipos.DOIS_PONTOS, "Esperado ':' entre chave e valor.")
-                var valor: qualquer = isto.declaracao()
-                chaves.adicionar(chave)
-                valores.adicionar(valor)
-
-                se isto.simbolos[isto.atual]._tipo != isto.tipos.CHAVE_DIREITA {
-                    isto.consumir(isto.tipos.VIRGULA, "Esperado vírgula antes da próxima expressão.")
-                }
-            }
-
-            retorna Dicionario(chaves, valores)
-        }
-
-        se tipoAtual == isto.tipos.COLCHETE_ESQUERDO {
-            isto.avancarEDevolverAnterior()
-            valores = []
-
-            se isto.verificarSeSimboloAtualEIgualA(isto.tipos.COLCHETE_DIREITO) {
-                retorna Vetor(valores)
-            }
-
-            enquanto nao isto.verificarSeSimboloAtualEIgualA(isto.tipos.COLCHETE_DIREITO) {
-                var itemVetor: qualquer = isto.declaracao()
-                valores.adicionar(itemVetor)
-                se isto.simbolos[isto.atual]._tipo != isto.tipos.COLCHETE_DIREITO {
-                    isto.consumir(isto.tipos.VIRGULA, "Esperado vírgula antes da próxima expressão.")
-                }
-            }
-
-            retorna Vetor(valores)
-        }
-
-        se tipoAtual == isto.tipos.FALSO {
-            isto.avancarEDevolverAnterior()
-            retorna Literal(falso)
-        }
-
-        se tipoAtual == isto.tipos.VERDADEIRO {
-            isto.avancarEDevolverAnterior()
-            retorna Literal(verdadeiro)
-        }
-
-        se tipoAtual == isto.tipos.NULO {
-            isto.avancarEDevolverAnterior()
-            retorna Literal(nulo)
-        }
-
-        se tipoAtual == isto.tipos.NUMERO ou tipoAtual == isto.tipos.TEXTO {
-            var simNum: Simbolo = isto.avancarEDevolverAnterior()
-            retorna Literal(simNum.lexema)
-        }
-
-        se tipoAtual == isto.tipos.IDENTIFICADOR {
-            var simId: Simbolo = isto.avancarEDevolverAnterior()
-            se nao isto.eFinalDosSimbolos() e (isto.simbolos[isto.atual]._tipo == isto.tipos.INCREMENTAR ou isto.simbolos[isto.atual]._tipo == isto.tipos.DECREMENTAR) {
-                var simIncDec: Simbolo = isto.avancarEDevolverAnterior()
-                retorna Unario(simIncDec, Variavel(simId), "DEPOIS")
-            }
-            retorna Variavel(simId)
-        }
-
-        se tipoAtual == isto.tipos.PARENTESE_ESQUERDO {
-            isto.avancarEDevolverAnterior()
-            var expr: qualquer = isto.ouLogico()
-            isto.consumir(isto.tipos.PARENTESE_DIREITO, "Esperado ')' após a expressão.")
-            retorna Agrupamento(expr)
-        }
-
-        retorna Literal(nulo)
-    }
-
-    finalizarChamada(entidadeChamada: qualquer): qualquer {
-        var argumentos: qualquer[] = []
-
-        se nao isto.verificarTipoSimboloAtual(isto.tipos.PARENTESE_DIREITO) {
-            argumentos.adicionar(isto.ouLogico())
-            enquanto isto.verificarSeSimboloAtualEIgualA(isto.tipos.VIRGULA) {
-                argumentos.adicionar(isto.ouLogico())
-            }
-        }
-
-        isto.consumir(isto.tipos.PARENTESE_DIREITO, "Esperado ')' após os argumentos.")
-        retorna Chamada(entidadeChamada, argumentos)
-    }
-
     chamar(): qualquer {
-        var expressao: qualquer = isto.primario()
-
-        enquanto verdadeiro {
-            se isto.verificarSeSimboloAtualEIgualA(isto.tipos.PARENTESE_ESQUERDO) {
-                expressao = isto.finalizarChamada(expressao)
-            } senão se isto.verificarSeSimboloAtualEIgualA(isto.tipos.PONTO) {
-                var nome: Simbolo = isto.consumir(isto.tipos.IDENTIFICADOR, "Esperado nome do método após '.'.")
-                expressao = AcessoMetodoOuPropriedade(expressao, nome)
-            } senão se isto.verificarSeSimboloAtualEIgualA(isto.tipos.COLCHETE_ESQUERDO) {
-                var indice: qualquer = isto.ouLogico()
-                var simFechamento: Simbolo = isto.consumir(isto.tipos.COLCHETE_DIREITO, "Esperado ']' após índice.")
-                expressao = AcessoIndiceVariavel(expressao, indice, simFechamento)
-            } senão {
-                retorna expressao
-            }
-        }
-
-        retorna expressao
+        retorna nulo
     }
 
     unario(): qualquer {
-        se isto.verificarSeSimboloAtualEIgualA3(isto.tipos.NEGACAO, isto.tipos.SUBTRACAO, isto.tipos.BIT_NOT) {
-            var opUnario: Simbolo = isto.simbolos[isto.atual - 1]
-            var direitoUnario: qualquer = isto.unario()
-            retorna Unario(opUnario, direitoUnario, "ANTES")
-        }
-        se isto.verificarSeSimboloAtualEIgualA2(isto.tipos.INCREMENTAR, isto.tipos.DECREMENTAR) {
-            var opIncDec: Simbolo = isto.simbolos[isto.atual - 1]
-            var dirIncDec: qualquer = isto.unario()
-            retorna Unario(opIncDec, dirIncDec, "ANTES")
+        se isto.verificarSeSimboloAtualEIgualA2(isto.tipos.NEGACAO, isto.tipos.SUBTRACAO) {
+            var op: Simbolo = isto.simbolos[isto.atual - 1]
+            var direito: qualquer = isto.unario()
+            retorna Unario(op, direito, "ANTES")
         }
         retorna isto.chamar()
     }
@@ -234,9 +95,9 @@ classe MicroAvaliadorSintatico {
     exponenciacao(): qualquer {
         var expressao: qualquer = isto.unario()
         enquanto isto.verificarSeSimboloAtualEIgualA(isto.tipos.EXPONENCIACAO) {
-            var opExp: Simbolo = isto.simbolos[isto.atual - 1]
-            var direitoExp: qualquer = isto.exponenciacao()
-            expressao = Binario(expressao, opExp, direitoExp)
+            var op: Simbolo = isto.simbolos[isto.atual - 1]
+            var direito: qualquer = isto.exponenciacao()
+            expressao = Binario(expressao, op, direito)
         }
         retorna expressao
     }
@@ -244,9 +105,9 @@ classe MicroAvaliadorSintatico {
     multiplicar(): qualquer {
         var expressao: qualquer = isto.exponenciacao()
         enquanto isto.verificarSeSimboloAtualEIgualA4(isto.tipos.DIVISAO, isto.tipos.DIVISAO_INTEIRA, isto.tipos.MODULO, isto.tipos.MULTIPLICACAO) {
-            var opMul: Simbolo = isto.simbolos[isto.atual - 1]
-            var direitoMul: qualquer = isto.exponenciacao()
-            expressao = Binario(expressao, opMul, direitoMul)
+            var op: Simbolo = isto.simbolos[isto.atual - 1]
+            var direito: qualquer = isto.exponenciacao()
+            expressao = Binario(expressao, op, direito)
         }
         retorna expressao
     }
@@ -254,49 +115,19 @@ classe MicroAvaliadorSintatico {
     adicaoOuSubtracao(): qualquer {
         var expressao: qualquer = isto.multiplicar()
         enquanto isto.verificarSeSimboloAtualEIgualA2(isto.tipos.SUBTRACAO, isto.tipos.ADICAO) {
-            var opAdicao: Simbolo = isto.simbolos[isto.atual - 1]
-            var direitoAdicao: qualquer = isto.multiplicar()
-            expressao = Binario(expressao, opAdicao, direitoAdicao)
-        }
-        retorna expressao
-    }
-
-    bitShift(): qualquer {
-        var expressao: qualquer = isto.adicaoOuSubtracao()
-        enquanto isto.verificarSeSimboloAtualEIgualA2(isto.tipos.MENOR_MENOR, isto.tipos.MAIOR_MAIOR) {
-            var opShift: Simbolo = isto.simbolos[isto.atual - 1]
-            var direitoShift: qualquer = isto.adicaoOuSubtracao()
-            expressao = Binario(expressao, opShift, direitoShift)
-        }
-        retorna expressao
-    }
-
-    bitE(): qualquer {
-        var expressao: qualquer = isto.bitShift()
-        enquanto isto.verificarSeSimboloAtualEIgualA(isto.tipos.BIT_AND) {
-            var opBitE: Simbolo = isto.simbolos[isto.atual - 1]
-            var direitoBitE: qualquer = isto.bitShift()
-            expressao = Binario(expressao, opBitE, direitoBitE)
-        }
-        retorna expressao
-    }
-
-    bitOu(): qualquer {
-        var expressao: qualquer = isto.bitE()
-        enquanto isto.verificarSeSimboloAtualEIgualA2(isto.tipos.BIT_OR, isto.tipos.BIT_XOR) {
-            var opBitOu: Simbolo = isto.simbolos[isto.atual - 1]
-            var direitoBitOu: qualquer = isto.bitE()
-            expressao = Binario(expressao, opBitOu, direitoBitOu)
+            var op: Simbolo = isto.simbolos[isto.atual - 1]
+            var direito: qualquer = isto.multiplicar()
+            expressao = Binario(expressao, op, direito)
         }
         retorna expressao
     }
 
     comparar(): qualquer {
-        var expressao: qualquer = isto.bitOu()
+        var expressao: qualquer = isto.adicaoOuSubtracao()
         enquanto isto.verificarSeSimboloAtualEIgualA4(isto.tipos.MAIOR, isto.tipos.MAIOR_IGUAL, isto.tipos.MENOR, isto.tipos.MENOR_IGUAL) {
-            var opCmp: Simbolo = isto.simbolos[isto.atual - 1]
-            var direitoCmp: qualquer = isto.bitOu()
-            expressao = Binario(expressao, opCmp, direitoCmp)
+            var op: Simbolo = isto.simbolos[isto.atual - 1]
+            var direito: qualquer = isto.adicaoOuSubtracao()
+            expressao = Binario(expressao, op, direito)
         }
         retorna expressao
     }
@@ -304,29 +135,19 @@ classe MicroAvaliadorSintatico {
     comparacaoIgualdade(): qualquer {
         var expressao: qualquer = isto.comparar()
         enquanto isto.verificarSeSimboloAtualEIgualA2(isto.tipos.DIFERENTE, isto.tipos.IGUAL_IGUAL) {
-            var opIgual: Simbolo = isto.simbolos[isto.atual - 1]
-            var direitoIgual: qualquer = isto.comparar()
-            expressao = Binario(expressao, opIgual, direitoIgual)
-        }
-        retorna expressao
-    }
-
-    emLogico(): qualquer {
-        var expressao: qualquer = isto.comparacaoIgualdade()
-        enquanto isto.verificarSeSimboloAtualEIgualA(isto.tipos.EM) {
-            var opEm: Simbolo = isto.simbolos[isto.atual - 1]
-            var direitoEm: qualquer = isto.comparacaoIgualdade()
-            expressao = Logico(expressao, opEm, direitoEm)
+            var op: Simbolo = isto.simbolos[isto.atual - 1]
+            var direito: qualquer = isto.comparar()
+            expressao = Binario(expressao, op, direito)
         }
         retorna expressao
     }
 
     eLogico(): qualquer {
-        var expressao: qualquer = isto.emLogico()
+        var expressao: qualquer = isto.comparacaoIgualdade()
         enquanto isto.verificarSeSimboloAtualEIgualA(isto.tipos.E) {
-            var opELog: Simbolo = isto.simbolos[isto.atual - 1]
-            var direitoELog: qualquer = isto.emLogico()
-            expressao = Logico(expressao, opELog, direitoELog)
+            var op: Simbolo = isto.simbolos[isto.atual - 1]
+            var direito: qualquer = isto.comparacaoIgualdade()
+            expressao = Logico(expressao, op, direito)
         }
         retorna expressao
     }
@@ -334,43 +155,14 @@ classe MicroAvaliadorSintatico {
     ouLogico(): qualquer {
         var expressao: qualquer = isto.eLogico()
         enquanto isto.verificarSeSimboloAtualEIgualA(isto.tipos.OU) {
-            var opOuLog: Simbolo = isto.simbolos[isto.atual - 1]
-            var direitoOuLog: qualquer = isto.eLogico()
-            expressao = Logico(expressao, opOuLog, direitoOuLog)
-        }
-        retorna expressao
-    }
-
-    elvis(): qualquer {
-        var expressao: qualquer = isto.ouLogico()
-        se isto.verificarSeSimboloAtualEIgualA(isto.tipos.ELVIS) {
-            var direitoElvis: qualquer = isto.ouLogico()
-            retorna Elvis(expressao, direitoElvis)
+            var op: Simbolo = isto.simbolos[isto.atual - 1]
+            var direito: qualquer = isto.eLogico()
+            expressao = Logico(expressao, op, direito)
         }
         retorna expressao
     }
 
     declaracao(): qualquer {
-        retorna isto.elvis()
-    }
-
-    analisar(retornoLexador: RetornoLexador, linha: inteiro): RetornoAvaliadorSintatico {
-        isto.erros = []
-        isto.atual = 0
-        isto.linha = linha
-        isto.simbolos = retornoLexador.simbolos
-
-        var resultado: RetornoAvaliadorSintatico = RetornoAvaliadorSintatico()
-
-        enquanto nao isto.eFinalDosSimbolos() {
-            var decl: qualquer = isto.declaracao()
-            resultado.declaracoes.adicionar(decl)
-        }
-
-        para cada erro em isto.erros {
-            resultado.erros.adicionar(erro)
-        }
-
-        retorna resultado
+        retorna isto.ouLogico()
     }
 }

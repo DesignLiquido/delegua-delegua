@@ -1,93 +1,219 @@
 classe TiposSimbolos {
     ADICAO: texto
-    SUBTRACAO: texto
-    MULTIPLICACAO: texto
-    DIVISAO: texto
-    DIVISAO_INTEIRA: texto
-    MODULO: texto
-    EXPONENCIACAO: texto
-    INCREMENTAR: texto
-    DECREMENTAR: texto
-    IDENTIFICADOR: texto
-    NUMERO: texto
-    TEXTO: texto
-    VERDADEIRO: texto
-    FALSO: texto
-    NULO: texto
-    PONTO: texto
-    VIRGULA: texto
-    PARENTESE_ESQUERDO: texto
-    PARENTESE_DIREITO: texto
-    COLCHETE_ESQUERDO: texto
-    COLCHETE_DIREITO: texto
-    CHAVE_ESQUERDA: texto
-    CHAVE_DIREITA: texto
-    MAIOR: texto
-    MAIOR_IGUAL: texto
-    MAIOR_MAIOR: texto
-    MENOR: texto
-    MENOR_IGUAL: texto
-    MENOR_MENOR: texto
-    IGUAL_IGUAL: texto
-    DIFERENTE: texto
+    ARROBA: texto
+    ASSERCAO: texto
+    ABSTRATO: texto
+    AJUDA: texto
     BIT_AND: texto
     BIT_OR: texto
     BIT_XOR: texto
+    CIRCUMFLEXO: texto
     BIT_NOT: texto
-    E: texto
-    OU: texto
-    EM: texto
-    NEGACAO: texto
-    NAO: texto
+    CADA: texto
+    CASO: texto
+    CHAVE_DIREITA: texto
+    CHAVE_ESQUERDA: texto
+    CLASSE: texto
+    COLCHETE_DIREITO: texto
+    COLCHETE_ESQUERDO: texto
+    COMENTARIO: texto
+    DOCUMENTARIO: texto
+    COMO: texto
+    CONSTANTE: texto
+    CONSTRUTOR: texto
+    CONTEM: texto
+    CONTINUA: texto
+    DE: texto
+    DECREMENTAR: texto
+    DIFERENTE: texto
+    DIVISAO: texto
+    DIVISAO_IGUAL: texto
+    DIVISAO_INTEIRA: texto
+    DIVISAO_INTEIRA_IGUAL: texto
     DOIS_PONTOS: texto
+    E: texto
     ELVIS: texto
-    INTERROGACAO: texto
+    ESTRANGEIRA: texto
+    EXTENSAO: texto
+    EM: texto
+    ENQUANTO: texto
     EOF: texto
+    ESCOLHA: texto
+    ESCREVA: texto
+    ESTATICO: texto
+    EXPONENCIACAO: texto
+    EXPRESSAO_REGULAR: texto
+    FALHAR: texto
+    FALSO: texto
+    FAZER: texto
+    FINALMENTE: texto
+    FUNCAO: texto
+    HERDA: texto
+    IDENTIFICADOR: texto
+    IMPLEMENTA: texto
+    MESCLA: texto
+    INTERFACE: texto
+    IGUAL: texto
+    IGUAL_IGUAL: texto
+    IMPORTAR: texto
+    INCREMENTAR: texto
+    INTERROGACAO: texto
+    ISTO: texto
+    LEIA: texto
+    LINHA_COMENTARIO: texto
+    MAIOR: texto
+    MAIOR_IGUAL: texto
+    MAIOR_MAIOR: texto
+    MAIS_IGUAL: texto
+    MENOR: texto
+    MENOR_IGUAL: texto
+    MENOR_MENOR: texto
+    MENOS_IGUAL: texto
+    MODULO: texto
+    MODULO_IGUAL: texto
+    MULTIPLICACAO: texto
+    MULTIPLICACAO_IGUAL: texto
+    NAO: texto
+    NEGACAO: texto
+    NULO: texto
+    NUMERO: texto
+    OPERADOR: texto
+    OU: texto
+    PADRAO: texto
+    PARA: texto
+    PARENTESE_DIREITO: texto
+    PARENTESE_ESQUERDO: texto
+    PEGUE: texto
+    PRIVADO: texto
+    PROTEGIDO: texto
+    PUBLICO: texto
+    PONTO: texto
+    PONTO_E_VIRGULA: texto
+    QUEBRAR: texto
+    RETORNA: texto
+    RETICENCIAS: texto
+    SUBTRACAO: texto
+    SE: texto
+    SENAO: texto
+    SETA_ESQUERDA: texto
+    SUPER: texto
+    SUSTAR: texto
+    TENDO: texto
+    TENTE: texto
+    TEXTO: texto
+    TIPO: texto
+    TUDO: texto
+    VARIAVEL: texto
+    VERDADEIRO: texto
+    VIRGULA: texto
 
     construtor() {
         isto.ADICAO = "ADICAO"
-        isto.SUBTRACAO = "SUBTRACAO"
-        isto.MULTIPLICACAO = "MULTIPLICACAO"
-        isto.DIVISAO = "DIVISAO"
-        isto.DIVISAO_INTEIRA = "DIVISAO_INTEIRA"
-        isto.MODULO = "MODULO"
-        isto.EXPONENCIACAO = "EXPONENCIACAO"
-        isto.INCREMENTAR = "INCREMENTAR"
-        isto.DECREMENTAR = "DECREMENTAR"
-        isto.IDENTIFICADOR = "IDENTIFICADOR"
-        isto.NUMERO = "NUMERO"
-        isto.TEXTO = "TEXTO"
-        isto.VERDADEIRO = "VERDADEIRO"
-        isto.FALSO = "FALSO"
-        isto.NULO = "NULO"
-        isto.PONTO = "PONTO"
-        isto.VIRGULA = "VIRGULA"
-        isto.PARENTESE_ESQUERDO = "PARENTESE_ESQUERDO"
-        isto.PARENTESE_DIREITO = "PARENTESE_DIREITO"
-        isto.COLCHETE_ESQUERDO = "COLCHETE_ESQUERDO"
-        isto.COLCHETE_DIREITO = "COLCHETE_DIREITO"
-        isto.CHAVE_ESQUERDA = "CHAVE_ESQUERDA"
-        isto.CHAVE_DIREITA = "CHAVE_DIREITA"
-        isto.MAIOR = "MAIOR"
-        isto.MAIOR_IGUAL = "MAIOR_IGUAL"
-        isto.MAIOR_MAIOR = "MAIOR_MAIOR"
-        isto.MENOR = "MENOR"
-        isto.MENOR_IGUAL = "MENOR_IGUAL"
-        isto.MENOR_MENOR = "MENOR_MENOR"
-        isto.IGUAL_IGUAL = "IGUAL_IGUAL"
-        isto.DIFERENTE = "DIFERENTE"
+        isto.ARROBA = "ARROBA"
+        isto.ASSERCAO = "ASSERCAO"
+        isto.ABSTRATO = "ABSTRATO"
+        isto.AJUDA = "AJUDA"
         isto.BIT_AND = "BIT_AND"
         isto.BIT_OR = "BIT_OR"
         isto.BIT_XOR = "BIT_XOR"
+        isto.CIRCUMFLEXO = "BIT_XOR"
         isto.BIT_NOT = "BIT_NOT"
-        isto.E = "E"
-        isto.OU = "OU"
-        isto.EM = "EM"
-        isto.NEGACAO = "NEGACAO"
-        isto.NAO = "NAO"
+        isto.CADA = "CADA"
+        isto.CASO = "CASO"
+        isto.CHAVE_DIREITA = "CHAVE_DIREITA"
+        isto.CHAVE_ESQUERDA = "CHAVE_ESQUERDA"
+        isto.CLASSE = "CLASSE"
+        isto.COLCHETE_DIREITO = "COLCHETE_DIREITO"
+        isto.COLCHETE_ESQUERDO = "COLCHETE_ESQUERDO"
+        isto.COMENTARIO = "COMENTARIO"
+        isto.DOCUMENTARIO = "DOCUMENTARIO"
+        isto.COMO = "COMO"
+        isto.CONSTANTE = "CONSTANTE"
+        isto.CONSTRUTOR = "CONSTRUTOR"
+        isto.CONTEM = "CONTEM"
+        isto.CONTINUA = "CONTINUA"
+        isto.DE = "DE"
+        isto.DECREMENTAR = "DECREMENTAR"
+        isto.DIFERENTE = "DIFERENTE"
+        isto.DIVISAO = "DIVISAO"
+        isto.DIVISAO_IGUAL = "DIVISAO_IGUAL"
+        isto.DIVISAO_INTEIRA = "DIVISAO_INTEIRA"
+        isto.DIVISAO_INTEIRA_IGUAL = "DIVISAO_INTEIRA_IGUAL"
         isto.DOIS_PONTOS = "DOIS_PONTOS"
+        isto.E = "E"
         isto.ELVIS = "ELVIS"
-        isto.INTERROGACAO = "INTERROGACAO"
+        isto.ESTRANGEIRA = "ESTRANGEIRA"
+        isto.EXTENSAO = "EXTENSAO"
+        isto.EM = "EM"
+        isto.ENQUANTO = "ENQUANTO"
         isto.EOF = "EOF"
+        isto.ESCOLHA = "ESCOLHA"
+        isto.ESCREVA = "ESCREVA"
+        isto.ESTATICO = "ESTATICO"
+        isto.EXPONENCIACAO = "EXPONENCIACAO"
+        isto.EXPRESSAO_REGULAR = "EXPRESSAO_REGULAR"
+        isto.FALHAR = "FALHAR"
+        isto.FALSO = "FALSO"
+        isto.FAZER = "FAZER"
+        isto.FINALMENTE = "FINALMENTE"
+        isto.FUNCAO = "FUNCAO"
+        isto.HERDA = "HERDA"
+        isto.IDENTIFICADOR = "IDENTIFICADOR"
+        isto.IMPLEMENTA = "IMPLEMENTA"
+        isto.MESCLA = "MESCLA"
+        isto.INTERFACE = "INTERFACE"
+        isto.IGUAL = "IGUAL"
+        isto.IGUAL_IGUAL = "IGUAL_IGUAL"
+        isto.IMPORTAR = "IMPORTAR"
+        isto.INCREMENTAR = "INCREMENTAR"
+        isto.INTERROGACAO = "INTERROGACAO"
+        isto.ISTO = "ISTO"
+        isto.LEIA = "LEIA"
+        isto.LINHA_COMENTARIO = "LINHA_COMENTARIO"
+        isto.MAIOR = "MAIOR"
+        isto.MAIOR_IGUAL = "MAIOR_IGUAL"
+        isto.MAIOR_MAIOR = "MAIOR_MAIOR"
+        isto.MAIS_IGUAL = "MAIS_IGUAL"
+        isto.MENOR = "MENOR"
+        isto.MENOR_IGUAL = "MENOR_IGUAL"
+        isto.MENOR_MENOR = "MENOR_MENOR"
+        isto.MENOS_IGUAL = "MENOS_IGUAL"
+        isto.MODULO = "MODULO"
+        isto.MODULO_IGUAL = "MODULO_IGUAL"
+        isto.MULTIPLICACAO = "MULTIPLICACAO"
+        isto.MULTIPLICACAO_IGUAL = "MULTIPLICACAO_IGUAL"
+        isto.NAO = "NAO"
+        isto.NEGACAO = "NEGACAO"
+        isto.NULO = "NULO"
+        isto.NUMERO = "NUMERO"
+        isto.OPERADOR = "OPERADOR"
+        isto.OU = "OU"
+        isto.PADRAO = "PADRAO"
+        isto.PARA = "PARA"
+        isto.PARENTESE_DIREITO = "PARENTESE_DIREITO"
+        isto.PARENTESE_ESQUERDO = "PARENTESE_ESQUERDO"
+        isto.PEGUE = "PEGUE"
+        isto.PRIVADO = "PRIVADO"
+        isto.PROTEGIDO = "PROTEGIDO"
+        isto.PUBLICO = "PUBLICO"
+        isto.PONTO = "PONTO"
+        isto.PONTO_E_VIRGULA = "PONTO_E_VIRGULA"
+        isto.QUEBRAR = "QUEBRAR"
+        isto.RETORNA = "RETORNA"
+        isto.RETICENCIAS = "RETICENCIAS"
+        isto.SUBTRACAO = "SUBTRACAO"
+        isto.SE = "SE"
+        isto.SENAO = "SENAO"
+        isto.SETA_ESQUERDA = "SETA_ESQUERDA"
+        isto.SUPER = "SUPER"
+        isto.SUSTAR = "SUSTAR"
+        isto.TENDO = "TENDO"
+        isto.TENTE = "TENTE"
+        isto.TEXTO = "TEXTO"
+        isto.TIPO = "TIPO"
+        isto.TUDO = "TUDO"
+        isto.VARIAVEL = "VARIAVEL"
+        isto.VERDADEIRO = "VERDADEIRO"
+        isto.VIRGULA = "VIRGULA"
     }
 }

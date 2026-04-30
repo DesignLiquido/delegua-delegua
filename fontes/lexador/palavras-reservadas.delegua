@@ -9,16 +9,144 @@ classe PalavrasReservadas {
 
     buscar(palavra: texto): texto {
         escolha palavra {
+            caso "abstrata":
+                retorna isto.tipos.ABSTRATO
+            caso "abstrato":
+                retorna isto.tipos.ABSTRATO
+            caso "assercao":
+                retorna isto.tipos.ASSERCAO
+            caso "ajuda":
+                retorna isto.tipos.AJUDA
+            caso "cada":
+                retorna isto.tipos.CADA
+            caso "caso":
+                retorna isto.tipos.CASO
+            caso "classe":
+                retorna isto.tipos.CLASSE
+            caso "como":
+                retorna isto.tipos.COMO
+            caso "construtor":
+                retorna isto.tipos.CONSTRUTOR
+            caso "constante":
+                retorna isto.tipos.CONSTANTE
+            caso "const":
+                retorna isto.tipos.CONSTANTE
+            caso "contem":
+                retorna isto.tipos.CONTEM
+            caso "continua":
+                retorna isto.tipos.CONTINUA
+            caso "continuar":
+                retorna isto.tipos.CONTINUA
+            caso "de":
+                retorna isto.tipos.DE
             caso "e":
                 retorna isto.tipos.E
             caso "em":
                 retorna isto.tipos.EM
+            caso "enquanto":
+                retorna isto.tipos.ENQUANTO
+            caso "extensao":
+                retorna isto.tipos.EXTENSAO
+            caso "estrangeira":
+                retorna isto.tipos.ESTRANGEIRA
+            caso "estatica":
+                retorna isto.tipos.ESTATICO
+            caso "estatico":
+                retorna isto.tipos.ESTATICO
+            caso "escolha":
+                retorna isto.tipos.ESCOLHA
+            caso "escolher":
+                retorna isto.tipos.ESCOLHA
+            caso "escreva":
+                retorna isto.tipos.ESCREVA
+            caso "escrever":
+                retorna isto.tipos.ESCREVA
+            caso "falhar":
+                retorna isto.tipos.FALHAR
             caso "falso":
                 retorna isto.tipos.FALSO
+            caso "faca":
+                retorna isto.tipos.FAZER
+            caso "fazer":
+                retorna isto.tipos.FAZER
+            caso "finalmente":
+                retorna isto.tipos.FINALMENTE
+            caso "fixo":
+                retorna isto.tipos.CONSTANTE
+            caso "funcao":
+                retorna isto.tipos.FUNCAO
+            caso "herda":
+                retorna isto.tipos.HERDA
+            caso "implementa":
+                retorna isto.tipos.IMPLEMENTA
+            caso "mescla":
+                retorna isto.tipos.MESCLA
+            caso "importar":
+                retorna isto.tipos.IMPORTAR
+            caso "importe":
+                retorna isto.tipos.IMPORTAR
+            caso "interface":
+                retorna isto.tipos.INTERFACE
+            caso "isto":
+                retorna isto.tipos.ISTO
+            caso "leia":
+                retorna isto.tipos.LEIA
+            caso "ler":
+                retorna isto.tipos.LEIA
+            caso "nao":
+                retorna isto.tipos.NAO
+            caso "operador":
+                retorna isto.tipos.OPERADOR
             caso "nulo":
                 retorna isto.tipos.NULO
             caso "ou":
                 retorna isto.tipos.OU
+            caso "padrao":
+                retorna isto.tipos.PADRAO
+            caso "para":
+                retorna isto.tipos.PARA
+            caso "pegar":
+                retorna isto.tipos.PEGUE
+            caso "pegue":
+                retorna isto.tipos.PEGUE
+            caso "privado":
+                retorna isto.tipos.PRIVADO
+            caso "protegido":
+                retorna isto.tipos.PROTEGIDO
+            caso "publico":
+                retorna isto.tipos.PUBLICO
+            caso "quebrar":
+                retorna isto.tipos.QUEBRAR
+            caso "quebre":
+                retorna isto.tipos.QUEBRAR
+            caso "retorna":
+                retorna isto.tipos.RETORNA
+            caso "retorne":
+                retorna isto.tipos.RETORNA
+            caso "retornar":
+                retorna isto.tipos.RETORNA
+            caso "se":
+                retorna isto.tipos.SE
+            caso "senao":
+                retorna isto.tipos.SENAO
+            caso "super":
+                retorna isto.tipos.SUPER
+            caso "sustar":
+                retorna isto.tipos.SUSTAR
+            caso "tendo":
+                retorna isto.tipos.TENDO
+            caso "tentar":
+                retorna isto.tipos.TENTE
+            caso "tente":
+                retorna isto.tipos.TENTE
+            caso "tipo":
+                retorna isto.tipos.TIPO
+            caso "tudo":
+                retorna isto.tipos.TUDO
+            caso "var":
+                retorna isto.tipos.VARIAVEL
+            caso "variavel":
+                retorna isto.tipos.VARIAVEL
             caso "verdadeiro":
                 retorna isto.tipos.VERDADEIRO
             padrão:
