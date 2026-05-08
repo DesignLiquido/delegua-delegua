@@ -1,9 +1,27 @@
+importar { Declaracao } de "../declaracoes/declaracao.delegua"
+
 classe RetornoAvaliadorSintatico {
-    declaracoes: qualquer[]
+    declaracoes: Declaracao[]
     erros: texto[]
 
     construtor() {
         isto.declaracoes = []
         isto.erros = []
+    }
+
+    paraTexto(): texto {
+        var texto: texto = "RetornoAvaliadorSintatico {\n"
+        texto += "  declaracoes: [\n"
+        para cada declaracao em isto.declaracoes {
+            texto += "    " + declaracao.paraTexto() + ",\n"
+        }
+        texto += "  ],\n"
+        texto += "  erros: [\n"
+        para cada erro em isto.erros {
+            texto += "    \"" + erro + "\",\n"
+        }
+        texto += "  ]\n"
+        texto += "}"
+        retorna texto
     }
 }

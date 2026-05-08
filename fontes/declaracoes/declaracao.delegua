@@ -6,4 +6,8 @@ classe Declaracao {
         isto._tipo = _tipo
         isto._valor = _valor
     }
+
+    paraTexto(): texto {
+        retorna "Declaracao(" + isto._tipo + ")"
+    }
 }
