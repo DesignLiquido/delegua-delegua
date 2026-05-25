@@ -1,0 +1,28 @@
+classe Retorna {
+    linha: número
+    hashArquivo: longo
+    simboloChave: qualquer
+    valor: qualquer
+    _tipo: texto
+
+    construtor(simboloChave: qualquer, valor: qualquer = nulo) {
+        isto.linha = simboloChave.linha
+        isto.hashArquivo = simboloChave.hashArquivo
+        isto.simboloChave = simboloChave
+        isto.valor = valor
+        se valor != nulo {
+            isto._tipo = valor._tipo
+        } senao {
+            isto._tipo = "vazio"
+        }
+    }
+
+    paraTexto(): texto {
+        var valorTexto: texto = "Nada"
+        se isto.valor != nulo {
+            valorTexto = isto.valor.paraTexto()
+        }
+
+        retorna "<retorna valor=" + valorTexto + " />"
+    }
+}

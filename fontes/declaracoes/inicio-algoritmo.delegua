@@ -1,0 +1,13 @@
+classe InicioAlgoritmo {
+    linha: número
+    hashArquivo: longo
+
+    construtor(linha: número, hashArquivo: longo) {
+        isto.linha = linha
+        isto.hashArquivo = hashArquivo
+    }
+
+    paraTexto(): texto {
+        retorna "<início-algoritmo />"
+    }
+}

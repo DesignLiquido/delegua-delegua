@@ -1,0 +1,21 @@
+classe Se {
+    linha: número
+    hashArquivo: longo
+    condicao: qualquer
+    caminhoEntao: qualquer
+    caminhosSeSenao: qualquer
+    caminhoSenao: qualquer
+
+    construtor(condicao: qualquer, caminhoEntao: qualquer, caminhosSeSenao: qualquer = nulo, caminhoSenao: qualquer = nulo) {
+        isto.linha = condicao.linha
+        isto.hashArquivo = condicao.hashArquivo
+        isto.condicao = condicao
+        isto.caminhoEntao = caminhoEntao
+        isto.caminhosSeSenao = caminhosSeSenao
+        isto.caminhoSenao = caminhoSenao
+    }
+
+    paraTexto(): texto {
+        retorna "<se condiçao=" + isto.condicao.paraTexto() + " />"
+    }
+}

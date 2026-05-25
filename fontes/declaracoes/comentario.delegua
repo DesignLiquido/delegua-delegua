@@ -1,0 +1,22 @@
+classe Comentario {
+    linha: número
+    hashArquivo: longo
+    conteudo: qualquer
+    multilinha: lógico
+
+    construtor(hashArquivo: longo, linha: número, conteudo: qualquer, multilinha: lógico, documentacaoPadrao: lógico = falso) {
+        isto.hashArquivo = hashArquivo
+        isto.linha = linha
+        isto.conteudo = conteudo
+        isto.multilinha = multilinha
+    }
+
+    paraTexto(): texto {
+        var multilinhaTexto: texto = "Não"
+        se isto.multilinha {
+            multilinhaTexto = "Sim"
+        }
+
+        retorna "<comentário conteúdo=" + isto.conteudo + " multilinha=" + multilinhaTexto + " />"
+    }
+}

@@ -1,0 +1,2 @@
+// Índice das declarações. Delégua ainda não possui um equivalente direto
+// para `export *`, então os módulos devem ser importados pelo arquivo desejado.

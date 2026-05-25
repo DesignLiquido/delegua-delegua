@@ -1,0 +1,19 @@
+classe Escolha {
+    linha: número
+    hashArquivo: longo
+    identificadorOuLiteral: qualquer
+    caminhos: qualquer[]
+    caminhoPadrao: qualquer
+
+    construtor(identificadorOuLiteral: qualquer, caminhos: qualquer[], caminhoPadrao: qualquer) {
+        isto.linha = identificadorOuLiteral.linha
+        isto.hashArquivo = identificadorOuLiteral.hashArquivo
+        isto.identificadorOuLiteral = identificadorOuLiteral
+        isto.caminhos = caminhos
+        isto.caminhoPadrao = caminhoPadrao
+    }
+
+    paraTexto(): texto {
+        retorna "<escolha identificadorOuLiteral=" + isto.identificadorOuLiteral + " />"
+    }
+}

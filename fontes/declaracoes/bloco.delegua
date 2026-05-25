@@ -1,0 +1,20 @@
+classe Bloco {
+    linha: número
+    hashArquivo: longo
+    declaracoes: qualquer[]
+
+    construtor(hashArquivo: longo, linha: número, declaracoes: qualquer[]) {
+        isto.hashArquivo = hashArquivo
+        isto.linha = linha
+        isto.declaracoes = declaracoes
+    }
+
+    paraTexto(): texto {
+        var resultado: texto = "<bloco>"
+        para cada declaracao em isto.declaracoes {
+            resultado = resultado + declaracao.paraTexto()
+        }
+
+        retorna resultado + "</bloco>"
+    }
+}

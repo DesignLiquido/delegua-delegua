@@ -1,0 +1,17 @@
+classe Falhar {
+    linha: número
+    hashArquivo: longo
+    simbolo: qualquer
+    explicacao: qualquer
+
+    construtor(simbolo: qualquer, explicacao: qualquer) {
+        isto.linha = simbolo.linha
+        isto.hashArquivo = simbolo.hashArquivo
+        isto.simbolo = simbolo
+        isto.explicacao = explicacao
+    }
+
+    paraTexto(): texto {
+        retorna "<falhar nome=" + isto.simbolo.lexema + " explicação=" + isto.explicacao + " />"
+    }
+}

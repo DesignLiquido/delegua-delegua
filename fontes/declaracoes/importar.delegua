@@ -1,0 +1,19 @@
+classe Importar {
+    linha: número
+    hashArquivo: longo
+    caminho: qualquer
+    simboloTudo: qualquer
+    elementosImportacao: qualquer[]
+
+    construtor(caminho: qualquer) {
+        isto.linha = caminho.linha
+        isto.hashArquivo = caminho.hashArquivo
+        isto.caminho = caminho
+        isto.simboloTudo = nulo
+        isto.elementosImportacao = []
+    }
+
+    paraTexto(): texto {
+        retorna "<importar caminho=" + isto.caminho.valor + " />"
+    }
+}

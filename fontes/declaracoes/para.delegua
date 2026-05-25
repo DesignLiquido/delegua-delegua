@@ -1,0 +1,32 @@
+classe Para {
+    linha: número
+    hashArquivo: longo
+    inicializador: qualquer
+    condicao: qualquer
+    incrementar: qualquer
+    corpo: qualquer
+    inicializada: lógico
+    blocoPosExecucao: qualquer
+    resolverIncrementoEmExecucao: lógico
+
+    construtor(hashArquivo: longo, linha: número, inicializador: qualquer, condicao: qualquer, incrementar: qualquer, corpo: qualquer) {
+        isto.hashArquivo = hashArquivo
+        isto.linha = linha
+        isto.inicializador = inicializador
+        isto.condicao = condicao
+        isto.incrementar = incrementar
+        isto.corpo = corpo
+        isto.inicializada = falso
+        isto.blocoPosExecucao = nulo
+        isto.resolverIncrementoEmExecucao = falso
+    }
+
+    paraTexto(): texto {
+        var inicializadorTexto: texto = ""
+        se isto.inicializador != nulo {
+            inicializadorTexto = "inicialização=" + isto.inicializador.paraTexto() + " "
+        }
+
+        retorna "<para " + inicializadorTexto + "condição=" + isto.condicao.paraTexto() + " />"
+    }
+}

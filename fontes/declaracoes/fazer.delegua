@@ -1,0 +1,17 @@
+classe Fazer {
+    linha: número
+    hashArquivo: longo
+    caminhoFazer: qualquer
+    condicaoEnquanto: qualquer
+
+    construtor(hashArquivo: longo, linha: número, caminhoFazer: qualquer, condicaoEnquanto: qualquer) {
+        isto.hashArquivo = hashArquivo
+        isto.linha = linha
+        isto.caminhoFazer = caminhoFazer
+        isto.condicaoEnquanto = condicaoEnquanto
+    }
+
+    paraTexto(): texto {
+        retorna "<fazer condição=" + isto.condicaoEnquanto.paraTexto() + " />"
+    }
+}

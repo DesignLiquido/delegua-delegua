@@ -1,0 +1,27 @@
+classe Ajuda {
+    linha: número
+    hashArquivo: longo
+    elemento: qualquer
+    _funcao: lógico
+
+    construtor(hashArquivo: longo, linha: número, elemento: qualquer = nulo, _funcao: lógico = verdadeiro) {
+        isto.hashArquivo = hashArquivo
+        isto.linha = linha
+        isto.elemento = elemento
+        isto._funcao = _funcao
+    }
+
+    paraTexto(): texto {
+        var retorno: texto = "<ajuda "
+        se isto.elemento != nulo {
+            retorno = retorno + "elemento=" + isto.elemento.paraTexto() + " "
+        }
+
+        var funcaoTexto: texto = "Não"
+        se isto._funcao {
+            funcaoTexto = "Sim"
+        }
+
+        retorna retorno + "funcao=" + funcaoTexto + " />"
+    }
+}

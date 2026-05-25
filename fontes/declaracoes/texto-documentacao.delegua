@@ -1,0 +1,15 @@
+classe TextoDocumentacao {
+    linha: número
+    hashArquivo: longo
+    conteudo: qualquer
+
+    construtor(hashArquivo: longo, linha: número, conteudo: qualquer) {
+        isto.hashArquivo = hashArquivo
+        isto.linha = linha
+        isto.conteudo = conteudo
+    }
+
+    paraTexto(): texto {
+        retorna "<texto-documentação conteúdo=" + isto.conteudo + " />"
+    }
+}

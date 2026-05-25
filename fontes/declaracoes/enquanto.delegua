@@ -1,0 +1,17 @@
+classe Enquanto {
+    linha: número
+    hashArquivo: longo
+    condicao: qualquer
+    corpo: qualquer
+
+    construtor(condicao: qualquer, corpo: qualquer) {
+        isto.linha = condicao.linha
+        isto.hashArquivo = condicao.hashArquivo
+        isto.condicao = condicao
+        isto.corpo = corpo
+    }
+
+    paraTexto(): texto {
+        retorna "<enquanto condição=" + isto.condicao.paraTexto() + " />"
+    }
+}

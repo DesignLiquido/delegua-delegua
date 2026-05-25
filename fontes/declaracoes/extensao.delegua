@@ -1,0 +1,29 @@
+classe Extensao {
+    linha: número
+    hashArquivo: longo
+    simboloTipo: qualquer
+    metodos: qualquer[]
+    ehGlobal: lógico
+
+    construtor(simboloTipo: qualquer, metodos: qualquer[], ehGlobal: lógico, hashArquivo: longo) {
+        isto.linha = simboloTipo.linha
+        isto.hashArquivo = hashArquivo
+        isto.simboloTipo = simboloTipo
+        isto.metodos = metodos
+        isto.ehGlobal = ehGlobal
+    }
+
+    paraTexto(): texto {
+        var escopo: texto = ""
+        se isto.ehGlobal {
+            escopo = "global "
+        }
+
+        var resultado: texto = "<extensao " + escopo + "tipo=" + isto.simboloTipo.lexema + ">"
+        para cada metodo em isto.metodos {
+            resultado = resultado + metodo.paraTexto()
+        }
+
+        retorna resultado + "</extensao>"
+    }
+}

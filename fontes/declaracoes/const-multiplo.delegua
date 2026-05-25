@@ -1,0 +1,19 @@
+classe ConstMultiplo {
+    linha: número
+    hashArquivo: longo
+    simbolos: qualquer[]
+    inicializador: qualquer
+    _tipo: qualquer
+
+    construtor(simbolos: qualquer[], inicializador: qualquer, _tipo: qualquer = nulo) {
+        isto.linha = simbolos[0].linha
+        isto.hashArquivo = simbolos[0].hashArquivo
+        isto.simbolos = simbolos
+        isto.inicializador = inicializador
+        isto._tipo = _tipo
+    }
+
+    paraTexto(): texto {
+        retorna "<const-múltiplo />"
+    }
+}

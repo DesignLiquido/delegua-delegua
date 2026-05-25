@@ -1,0 +1,21 @@
+classe ParaCada {
+    linha: número
+    hashArquivo: longo
+    variavelIteracao: qualquer
+    vetorOuDicionario: qualquer
+    corpo: qualquer
+    posicaoAtual: número
+
+    construtor(hashArquivo: longo, linha: número, variavelIteracao: qualquer, vetor: qualquer, corpo: qualquer) {
+        isto.hashArquivo = hashArquivo
+        isto.linha = linha
+        isto.variavelIteracao = variavelIteracao
+        isto.vetorOuDicionario = vetor
+        isto.corpo = corpo
+        isto.posicaoAtual = 0
+    }
+
+    paraTexto(): texto {
+        retorna "<para-cada variávelIteração=" + isto.variavelIteracao.paraTexto() + " />"
+    }
+}

@@ -1,0 +1,15 @@
+classe CabecalhoPrograma {
+    linha: número
+    hashArquivo: longo
+    nomeProgramaAlgoritmo: texto
+
+    construtor(linha: número, hashArquivo: longo, nomeProgramaAlgoritmo: texto) {
+        isto.linha = linha
+        isto.hashArquivo = hashArquivo
+        isto.nomeProgramaAlgoritmo = nomeProgramaAlgoritmo
+    }
+
+    paraTexto(): texto {
+        retorna "<cabeçalho-programa nome=" + isto.nomeProgramaAlgoritmo + " />"
+    }
+}

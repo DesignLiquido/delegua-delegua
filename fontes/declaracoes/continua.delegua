@@ -1,0 +1,13 @@
+classe Continua {
+    linha: número
+    hashArquivo: longo
+
+    construtor(simbolo: qualquer) {
+        isto.linha = simbolo.linha
+        isto.hashArquivo = simbolo.hashArquivo
+    }
+
+    paraTexto(): texto {
+        retorna "<continua />"
+    }
+}

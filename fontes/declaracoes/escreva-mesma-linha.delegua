@@ -1,0 +1,20 @@
+classe EscrevaMesmaLinha {
+    linha: número
+    hashArquivo: longo
+    argumentos: qualquer[]
+
+    construtor(linha: número, hashArquivo: longo, argumentos: qualquer[]) {
+        isto.linha = linha
+        isto.hashArquivo = hashArquivo
+        isto.argumentos = argumentos
+    }
+
+    paraTexto(): texto {
+        var argumentosTexto: texto = ""
+        para cada argumento em isto.argumentos {
+            argumentosTexto = argumentosTexto + argumento.paraTexto()
+        }
+
+        retorna "<escreva-mesma-linha argumentos=" + argumentosTexto + " />"
+    }
+}
