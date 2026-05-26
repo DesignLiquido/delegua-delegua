@@ -1,7 +1,9 @@
 classe Literal {
+    noh: texto
     valor: qualquer
 
     construtor(valor: qualquer) {
+        isto.noh = "Literal"
         isto.valor = valor
     }
 

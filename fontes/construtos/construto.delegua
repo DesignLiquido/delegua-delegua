@@ -1,8 +1,10 @@
 classe Construto {
+    noh: texto
     _tipo: texto
     _valor: qualquer
 
     construtor(_tipo: texto, _valor: qualquer) {
+        isto.noh = _tipo
         isto._tipo = _tipo
         isto._valor = _valor
     }

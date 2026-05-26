@@ -1,4 +1,5 @@
 classe Const {
+    noh: texto
     linha: número
     hashArquivo: longo
     simbolo: qualquer
@@ -8,6 +9,7 @@ classe Const {
     decoradores: qualquer[]
 
     construtor(simbolo: qualquer, inicializador: qualquer, tipoDeclarado: texto = "qualquer", tipoExplicito: lógico = falso, decoradores: qualquer[] = []) {
+        isto.noh = "Const"
         isto.linha = simbolo.linha
         isto.hashArquivo = simbolo.hashArquivo
         isto.simbolo = simbolo

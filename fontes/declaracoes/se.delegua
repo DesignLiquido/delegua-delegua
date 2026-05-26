@@ -1,4 +1,5 @@
 classe Se {
+    noh: texto
     linha: número
     hashArquivo: longo
     condicao: qualquer
@@ -7,6 +8,7 @@ classe Se {
     caminhoSenao: qualquer
 
     construtor(condicao: qualquer, caminhoEntao: qualquer, caminhosSeSenao: qualquer = nulo, caminhoSenao: qualquer = nulo) {
+        isto.noh = "Se"
         isto.linha = condicao.linha
         isto.hashArquivo = condicao.hashArquivo
         isto.condicao = condicao

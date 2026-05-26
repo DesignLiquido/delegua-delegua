@@ -1,11 +1,13 @@
 importar { Simbolo } de "../lexador/simbolo.delegua"
 
 classe Binario {
+    noh: texto
     esquerda: qualquer
     _operador: Simbolo
     direita: qualquer
 
     construtor(esquerda: qualquer, _operador: Simbolo, direita: qualquer) {
+        isto.noh = "Binario"
         isto.esquerda = esquerda
         isto._operador = _operador
         isto.direita = direita

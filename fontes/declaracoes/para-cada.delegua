@@ -1,4 +1,5 @@
 classe ParaCada {
+    noh: texto
     linha: número
     hashArquivo: longo
     variavelIteracao: qualquer
@@ -7,6 +8,7 @@ classe ParaCada {
     posicaoAtual: número
 
     construtor(hashArquivo: longo, linha: número, variavelIteracao: qualquer, vetor: qualquer, corpo: qualquer) {
+        isto.noh = "ParaCada"
         isto.hashArquivo = hashArquivo
         isto.linha = linha
         isto.variavelIteracao = variavelIteracao

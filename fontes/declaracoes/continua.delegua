@@ -1,8 +1,10 @@
 classe Continua {
+    noh: texto
     linha: número
     hashArquivo: longo
 
     construtor(simbolo: qualquer) {
+        isto.noh = "Continua"
         isto.linha = simbolo.linha
         isto.hashArquivo = simbolo.hashArquivo
     }

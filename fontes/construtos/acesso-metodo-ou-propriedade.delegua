@@ -1,10 +1,12 @@
 importar { Simbolo } de "../lexador/simbolo.delegua"
 
 classe AcessoMetodoOuPropriedade {
+    noh: texto
     objeto: qualquer
     simbolo: Simbolo
 
     construtor(objeto: qualquer, simbolo: Simbolo) {
+        isto.noh = "AcessoMetodoOuPropriedade"
         isto.objeto = objeto
         isto.simbolo = simbolo
     }

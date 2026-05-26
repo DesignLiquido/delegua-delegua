@@ -1,4 +1,5 @@
 classe Declaracao {
+    noh: texto
     _tipo: texto
     _valor: qualquer
     linha: número
@@ -7,6 +8,7 @@ classe Declaracao {
     decoradores: qualquer[]
 
     construtor(_tipo: texto, _valor: qualquer, decoradores: qualquer[] = [], assinaturaMetodo: texto = "<principal>") {
+        isto.noh = _tipo
         isto._tipo = _tipo
         isto._valor = _valor
         isto.linha = 0

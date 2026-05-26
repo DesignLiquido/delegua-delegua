@@ -1,7 +1,9 @@
 classe Agrupamento {
+    noh: texto
     expressao: qualquer
 
     construtor(expressao: qualquer) {
+        isto.noh = "Agrupamento"
         isto.expressao = expressao
     }
 

@@ -1,4 +1,5 @@
 classe Tente {
+    noh: texto
     linha: número
     hashArquivo: longo
     caminhoTente: qualquer[]
@@ -7,6 +8,7 @@ classe Tente {
     caminhoFinalmente: qualquer[]
 
     construtor(hashArquivo: longo, linha: número, caminhoTente: qualquer[], caminhoPegue: qualquer, caminhoSenao: qualquer[], caminhoFinalmente: qualquer[]) {
+        isto.noh = "Tente"
         isto.hashArquivo = hashArquivo
         isto.linha = linha
         isto.caminhoTente = caminhoTente

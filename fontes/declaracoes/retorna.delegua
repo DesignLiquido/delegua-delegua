@@ -1,4 +1,5 @@
 classe Retorna {
+    noh: texto
     linha: número
     hashArquivo: longo
     simboloChave: qualquer
@@ -6,6 +7,7 @@ classe Retorna {
     _tipo: texto
 
     construtor(simboloChave: qualquer, valor: qualquer = nulo) {
+        isto.noh = "Retorna"
         isto.linha = simboloChave.linha
         isto.hashArquivo = simboloChave.hashArquivo
         isto.simboloChave = simboloChave

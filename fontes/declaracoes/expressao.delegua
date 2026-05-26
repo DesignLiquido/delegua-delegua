@@ -1,10 +1,12 @@
 classe Expressao {
+    noh: texto
     linha: número
     hashArquivo: longo
     expressao: qualquer
     decoradores: qualquer[]
 
     construtor(expressao: qualquer, decoradores: qualquer[] = []) {
+        isto.noh = "Expressao"
         isto.linha = expressao.linha
         isto.hashArquivo = expressao.hashArquivo
         isto.expressao = expressao

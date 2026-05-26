@@ -1,9 +1,11 @@
 classe Bloco {
+    noh: texto
     linha: número
     hashArquivo: longo
     declaracoes: qualquer[]
 
     construtor(hashArquivo: longo, linha: número, declaracoes: qualquer[]) {
+        isto.noh = "Bloco"
         isto.hashArquivo = hashArquivo
         isto.linha = linha
         isto.declaracoes = declaracoes

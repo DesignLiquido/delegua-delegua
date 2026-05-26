@@ -1,4 +1,5 @@
 classe Var {
+    noh: texto
     linha: número
     hashArquivo: longo
     simbolo: qualquer
@@ -12,6 +13,7 @@ classe Var {
     decoradores: qualquer[]
 
     construtor(simbolo: qualquer, inicializador: qualquer = nulo, _tipo: texto = "qualquer", tipoExplicito: lógico = falso, decoradores: qualquer[] = [], _tipoOriginal: texto = "") {
+        isto.noh = "Var"
         isto.linha = simbolo.linha
         isto.hashArquivo = simbolo.hashArquivo
         isto.simbolo = simbolo

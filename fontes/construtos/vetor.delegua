@@ -1,7 +1,9 @@
 classe Vetor {
+    noh: texto
     valores: qualquer[]
 
     construtor(valores: qualquer[]) {
+        isto.noh = "Vetor"
         isto.valores = valores
     }
 

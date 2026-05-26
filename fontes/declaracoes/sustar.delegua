@@ -1,8 +1,10 @@
 classe Sustar {
+    noh: texto
     linha: número
     hashArquivo: longo
 
     construtor(simbolo: qualquer) {
+        isto.noh = "Sustar"
         isto.linha = simbolo.linha
         isto.hashArquivo = simbolo.hashArquivo
     }

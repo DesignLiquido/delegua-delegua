@@ -1,4 +1,5 @@
 classe FuncaoDeclaracao {
+    noh: texto
     linha: número
     hashArquivo: longo
     simbolo: qualquer
@@ -15,6 +16,7 @@ classe FuncaoDeclaracao {
     documentacao: qualquer
 
     construtor(simbolo: qualquer, _funcao: qualquer, tipoRetorno: texto = "qualquer", decoradores: qualquer[] = [], acesso: texto = "publico", _estatico: lógico = falso, _abstrato: lógico = falso, eObtenedor: lógico = falso, eDefinidor: lógico = falso, eFuncaoDeDecorador: lógico = falso) {
+        isto.noh = "FuncaoDeclaracao"
         isto.linha = simbolo.linha
         isto.hashArquivo = simbolo.hashArquivo
         isto.id = "funcao-" + simbolo.lexema + "-" + texto(simbolo.linha)

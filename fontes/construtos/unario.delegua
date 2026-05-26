@@ -1,11 +1,13 @@
 importar { Simbolo } de "../lexador/simbolo.delegua"
 
 classe Unario {
+    noh: texto
     _operador: Simbolo
     operando: qualquer
     posicao: texto
 
     construtor(_operador: Simbolo, operando: qualquer, posicao: texto) {
+        isto.noh = "Unario"
         isto._operador = _operador
         isto.operando = operando
         isto.posicao = posicao

@@ -1,8 +1,10 @@
 classe Dicionario {
+    noh: texto
     chaves: qualquer[]
     valores: qualquer[]
 
     construtor(chaves: qualquer[], valores: qualquer[]) {
+        isto.noh = "Dicionario"
         isto.chaves = chaves
         isto.valores = valores
     }

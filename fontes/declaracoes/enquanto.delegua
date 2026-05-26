@@ -1,10 +1,12 @@
 classe Enquanto {
+    noh: texto
     linha: número
     hashArquivo: longo
     condicao: qualquer
     corpo: qualquer
 
     construtor(condicao: qualquer, corpo: qualquer) {
+        isto.noh = "Enquanto"
         isto.linha = condicao.linha
         isto.hashArquivo = condicao.hashArquivo
         isto.condicao = condicao

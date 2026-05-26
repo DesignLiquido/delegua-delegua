@@ -1,8 +1,10 @@
 classe Chamada {
+    noh: texto
     entidadeChamada: qualquer
     argumentos: qualquer[]
 
     construtor(entidadeChamada: qualquer, argumentos: qualquer[]) {
+        isto.noh = "Chamada"
         isto.entidadeChamada = entidadeChamada
         isto.argumentos = argumentos
     }

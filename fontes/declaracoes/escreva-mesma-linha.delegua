@@ -1,9 +1,11 @@
 classe EscrevaMesmaLinha {
+    noh: texto
     linha: número
     hashArquivo: longo
     argumentos: qualquer[]
 
     construtor(linha: número, hashArquivo: longo, argumentos: qualquer[]) {
+        isto.noh = "EscrevaMesmaLinha"
         isto.linha = linha
         isto.hashArquivo = hashArquivo
         isto.argumentos = argumentos
