@@ -1,11 +1,42 @@
+importar { Simbolo } de "../lexador/simbolo.delegua"
+
 classe Construto {
     noh: texto
-    _tipo: texto
-    _valor: qualquer
 
-    construtor(_tipo: texto, _valor: qualquer) {
-        isto.noh = _tipo
-        isto._tipo = _tipo
-        isto._valor = _valor
+    // Literal (tipoLiteral discrimina qual dos três campos abaixo é válido)
+    tipoLiteral: texto
+    literalNumero: número
+    literalTexto: texto
+    literalLogico: lógico
+
+    // Binario / Logico
+    esquerda: Construto
+    simboloOperador: Simbolo
+    direita: Construto
+
+    // Unario
+    operando: Construto
+    posicaoUnario: texto
+
+    // Variavel
+    simbolo: Simbolo
+
+    // Chamada
+    entidadeChamada: Construto
+    argumentos: Construto[]
+
+    // Agrupamento
+    expressao: Construto
+
+    // Atribuicao
+    alvoAtribuicao: Construto
+    valorAtribuicao: Construto
+
+    construtor(noh: texto) {
+        isto.noh = noh
+    }
+
+    paraTexto(): texto {
+        retorna "<construto noh=${isto.noh} />"
     }
 }

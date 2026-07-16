@@ -1,3 +1,285 @@
+importar { EspacoMemoria } de "./espaco-memoria.delegua"
+importar { PilhaEscoposExecucao } de "./pilha-escopos-execucao.delegua"
+importar { Construto } de "../construtos/construto.delegua"
+importar { Declaracao } de "../declaracoes/declaracao.delegua"
+
 classe Interpretador {
-    
+    pilha: PilhaEscoposExecucao
+
+    construtor() {
+        isto.pilha = PilhaEscoposExecucao()
+        var escopo: EspacoMemoria = EspacoMemoria()
+        isto.pilha.empilhar(escopo)
+        isto.registrarBuiltins()
+    }
+
+    registrarBuiltins() {
+        var fnEscreva: dicionário = {}
+        fnEscreva._nativo = verdadeiro
+        fnEscreva._nome = "escreva"
+        isto.pilha.definirVariavel("escreva", fnEscreva)
+
+        var fnConcatenar: dicionário = {}
+        fnConcatenar._nativo = verdadeiro
+        fnConcatenar._nome = "concatenar"
+        isto.pilha.definirVariavel("concatenar", fnConcatenar)
+
+        var fnTexto: dicionário = {}
+        fnTexto._nativo = verdadeiro
+        fnTexto._nome = "texto"
+        isto.pilha.definirVariavel("texto", fnTexto)
+
+        var fnNumero: dicionário = {}
+        fnNumero._nativo = verdadeiro
+        fnNumero._nome = "numero"
+        isto.pilha.definirVariavel("numero", fnNumero)
+
+        var fnTipo: dicionário = {}
+        fnTipo._nativo = verdadeiro
+        fnTipo._nome = "tipo"
+        isto.pilha.definirVariavel("tipo", fnTipo)
+
+        var fnInteiro: dicionário = {}
+        fnInteiro._nativo = verdadeiro
+        fnInteiro._nome = "inteiro"
+        isto.pilha.definirVariavel("inteiro", fnInteiro)
+    }
+
+    // Cria um valor dinâmico com discriminante explícito. "tipo" é um dos
+    // "numero" | "texto" | "logico" | "nulo".
+    criarValor(tipoValor: texto, valor: qualquer): dicionário {
+        var v: dicionário = {}
+        v["tipo"] = tipoValor
+        v["valor"] = valor
+        retorna v
+    }
+
+    paraTextoExibicao(v: dicionário): texto {
+        se v == nulo ou v["tipo"] == "nulo" { retorna "nulo" }
+        se v["tipo"] == "texto" {
+            var t: texto = v["valor"]
+            retorna t
+        }
+        se v["tipo"] == "numero" {
+            var n: número = v["valor"]
+            retorna texto(n)
+        }
+        se v["tipo"] == "logico" {
+            var l: lógico = v["valor"]
+            se l { retorna "verdadeiro" }
+            retorna "falso"
+        }
+        retorna "?"
+    }
+
+    paraNumero(v: dicionário): número {
+        se v["tipo"] == "numero" {
+            var n: número = v["valor"]
+            retorna n
+        }
+        se v["tipo"] == "texto" {
+            var t: texto = v["valor"]
+            retorna numero(t)
+        }
+        retorna 0
+    }
+
+    chamarNativo(nome: texto, args: qualquer[]): dicionário {
+        se nome == "escreva" {
+            escreva(isto.paraTextoExibicao(args[0]))
+            retorna isto.criarValor("nulo", nulo)
+        }
+        se nome == "concatenar" {
+            retorna isto.criarValor("texto", isto.paraTextoExibicao(args[0]) + isto.paraTextoExibicao(args[1]))
+        }
+        se nome == "texto" {
+            retorna isto.criarValor("texto", isto.paraTextoExibicao(args[0]))
+        }
+        se nome == "numero" {
+            retorna isto.criarValor("numero", isto.paraNumero(args[0]))
+        }
+        se nome == "tipo" {
+            var primeiro: dicionário = args[0]
+            retorna isto.criarValor("texto", primeiro["tipo"])
+        }
+        se nome == "inteiro" {
+            var n: número = isto.paraNumero(args[0])
+            var i: inteiro = n
+            var iNum: número = i
+            retorna isto.criarValor("numero", iNum)
+        }
+        falhar("Função nativa não encontrada: " + nome)
+        retorna nulo
+    }
+
+    eVerdadeiro(valor: dicionário): lógico {
+        se valor == nulo ou valor["tipo"] == "nulo" { retorna falso }
+        se valor["tipo"] == "logico" {
+            var l: lógico = valor["valor"]
+            retorna l
+        }
+        retorna verdadeiro
+    }
+
+    avaliar(no: Construto): dicionário {
+        se no == nulo { retorna isto.criarValor("nulo", nulo) }
+        var t: texto = no.noh
+
+        se t == "Literal" {
+            se no.tipoLiteral == "numero" { retorna isto.criarValor("numero", no.literalNumero) }
+            se no.tipoLiteral == "texto" { retorna isto.criarValor("texto", no.literalTexto) }
+            se no.tipoLiteral == "logico" { retorna isto.criarValor("logico", no.literalLogico) }
+            retorna isto.criarValor("nulo", nulo)
+        }
+        se t == "Agrupamento" { retorna isto.avaliar(no.expressao) }
+        se t == "Variavel" { retorna isto.pilha.obterValorVariavel(no.simbolo.lexema) }
+        se t == "Unario" { retorna isto.avaliarUnario(no) }
+        se t == "Binario" { retorna isto.avaliarBinario(no) }
+        se t == "Logico" { retorna isto.avaliarLogico(no) }
+        se t == "Chamada" { retorna isto.avaliarChamada(no) }
+        se t == "Atribuicao" { retorna isto.avaliarAtribuicao(no) }
+        retorna isto.criarValor("nulo", nulo)
+    }
+
+    executar(declaracao: Declaracao): qualquer {
+        se declaracao == nulo { retorna nulo }
+        var t: texto = declaracao.noh
+
+        se t == "ComandoExpressao" { retorna isto.avaliar(declaracao.expressaoComando) }
+        se t == "ComandoBloco" { retorna isto.executarBloco(declaracao.blocoDeclaracoes) }
+        se t == "DeclaracaoVariavel" { retorna isto.executarDeclaracaoVariavel(declaracao) }
+
+        retorna nulo
+    }
+
+    executarBloco(declaracoes: Declaracao[]): qualquer {
+        se declaracoes == nulo { retorna nulo }
+        var espaco: EspacoMemoria = EspacoMemoria()
+        isto.pilha.empilhar(espaco)
+
+        var resultado: qualquer = nulo
+        var i: inteiro = 0
+        enquanto i < declaracoes.tamanho() {
+            resultado = isto.executar(declaracoes[i])
+            i = i + 1
+        }
+
+        isto.pilha.removerUltimo()
+        retorna resultado
+    }
+
+    avaliarUnario(no: Construto): dicionário {
+        var operando: dicionário = isto.avaliar(no.operando)
+        var tipoOp: texto = no.simboloOperador._tipo
+
+        se tipoOp == "NEGACAO" {
+            retorna isto.criarValor("logico", nao isto.eVerdadeiro(operando))
+        }
+        se tipoOp == "SUBTRACAO" {
+            var n: número = isto.paraNumero(operando)
+            retorna isto.criarValor("numero", -n)
+        }
+        retorna isto.criarValor("nulo", nulo)
+    }
+
+    avaliarBinario(no: Construto): dicionário {
+        var esq: dicionário = isto.avaliar(no.esquerda)
+        var dir: dicionário = isto.avaliar(no.direita)
+        var tipoOp: texto = no.simboloOperador._tipo
+
+        se esq["tipo"] == "texto" ou dir["tipo"] == "texto" {
+            se tipoOp == "ADICAO" {
+                retorna isto.criarValor("texto", isto.paraTextoExibicao(esq) + isto.paraTextoExibicao(dir))
+            }
+        }
+
+        var a: número = isto.paraNumero(esq)
+        var b: número = isto.paraNumero(dir)
+
+        se tipoOp == "ADICAO" { retorna isto.criarValor("numero", a + b) }
+        se tipoOp == "SUBTRACAO" { retorna isto.criarValor("numero", a - b) }
+        se tipoOp == "MULTIPLICACAO" { retorna isto.criarValor("numero", a * b) }
+        se tipoOp == "DIVISAO" { retorna isto.criarValor("numero", a / b) }
+        se tipoOp == "DIVISAO_INTEIRA" {
+            var quociente: inteiro = a / b
+            var quocienteNum: número = quociente
+            retorna isto.criarValor("numero", quocienteNum)
+        }
+        se tipoOp == "MODULO" { retorna isto.criarValor("numero", a % b) }
+        se tipoOp == "EXPONENCIACAO" { retorna isto.criarValor("numero", a ** b) }
+        se tipoOp == "IGUAL_IGUAL" { retorna isto.criarValor("logico", a == b) }
+        se tipoOp == "DIFERENTE" { retorna isto.criarValor("logico", a != b) }
+        se tipoOp == "MAIOR" { retorna isto.criarValor("logico", a > b) }
+        se tipoOp == "MAIOR_IGUAL" { retorna isto.criarValor("logico", a >= b) }
+        se tipoOp == "MENOR" { retorna isto.criarValor("logico", a < b) }
+        se tipoOp == "MENOR_IGUAL" { retorna isto.criarValor("logico", a <= b) }
+        retorna isto.criarValor("nulo", nulo)
+    }
+
+    avaliarLogico(no: Construto): dicionário {
+        var esq: dicionário = isto.avaliar(no.esquerda)
+        var tipoOp: texto = no.simboloOperador._tipo
+
+        se tipoOp == "E" {
+            se nao isto.eVerdadeiro(esq) { retorna esq }
+            retorna isto.avaliar(no.direita)
+        }
+        se tipoOp == "OU" {
+            se isto.eVerdadeiro(esq) { retorna esq }
+            retorna isto.avaliar(no.direita)
+        }
+        retorna isto.criarValor("nulo", nulo)
+    }
+
+    avaliarChamada(no: Construto): dicionário {
+        var args: qualquer[] = []
+        var indiceArg: inteiro = 0
+        enquanto indiceArg < no.argumentos.tamanho() {
+            args.adicionar(isto.avaliar(no.argumentos[indiceArg]))
+            indiceArg = indiceArg + 1
+        }
+
+        // Toda entidade chamável hoje é um nome nativo fixo (não há declaração de
+        // função nem referência indireta a função na gramática atual) — resolve
+        // pelo próprio nome no AST, sem precisar inspecionar o valor em runtime.
+        se no.entidadeChamada.noh == "Variavel" {
+            retorna isto.chamarNativo(no.entidadeChamada.simbolo.lexema, args)
+        }
+
+        falhar("Entidade não é chamável.")
+        retorna nulo
+    }
+
+    avaliarAtribuicao(no: Construto): dicionário {
+        var alvo: Construto = no.alvoAtribuicao
+        var valorAtrib: dicionário = isto.avaliar(no.valorAtribuicao)
+
+        se alvo.noh == "Variavel" {
+            isto.pilha.atribuirVariavel(alvo.simbolo.lexema, valorAtrib)
+            retorna valorAtrib
+        }
+
+        falhar("Alvo de atribuição inválido.")
+        retorna nulo
+    }
+
+    executarDeclaracaoVariavel(declaracao: Declaracao): qualquer {
+        var valorVar: dicionário = isto.criarValor("nulo", nulo)
+        se declaracao.variavelInicializador != nulo {
+            valorVar = isto.avaliar(declaracao.variavelInicializador)
+        }
+        isto.pilha.definirVariavel(declaracao.variavelNome.lexema, valorVar)
+        retorna nulo
+    }
+
+    interpretar(listaDeclaracoes: Declaracao[]): qualquer {
+        se listaDeclaracoes == nulo { retorna nulo }
+        var resInterp: qualquer = nulo
+        var indiceInterp: inteiro = 0
+        enquanto indiceInterp < listaDeclaracoes.tamanho() {
+            resInterp = isto.executar(listaDeclaracoes[indiceInterp])
+            indiceInterp = indiceInterp + 1
+        }
+        retorna resInterp
+    }
 }

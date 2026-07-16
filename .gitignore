@@ -6,6 +6,8 @@ coverage/
 *.ll
 *.log
 *.o
+*.ilk
+*.pdb
 
 .env
 .vscode/*.code-workspace

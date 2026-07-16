@@ -1,23 +1,28 @@
+importar { Simbolo } de "../lexador/simbolo.delegua"
+importar { Construto } de "../construtos/construto.delegua"
+
 classe Declaracao {
     noh: texto
-    _tipo: texto
-    _valor: qualquer
     linha: número
     hashArquivo: longo
-    assinaturaMetodo: texto
-    decoradores: qualquer[]
 
-    construtor(_tipo: texto, _valor: qualquer, decoradores: qualquer[] = [], assinaturaMetodo: texto = "<principal>") {
-        isto.noh = _tipo
-        isto._tipo = _tipo
-        isto._valor = _valor
+    // ComandoExpressao
+    expressaoComando: Construto
+
+    // ComandoBloco
+    blocoDeclaracoes: Declaracao[]
+
+    // DeclaracaoVariavel
+    variavelNome: Simbolo
+    variavelInicializador: Construto
+
+    construtor(noh: texto) {
+        isto.noh = noh
         isto.linha = 0
         isto.hashArquivo = 0
-        isto.decoradores = decoradores
-        isto.assinaturaMetodo = assinaturaMetodo
     }
 
     paraTexto(): texto {
-        retorna "Declaracao(" + isto._tipo + ")"
+        retorna "Declaracao(" + isto.noh + ")"
     }
 }

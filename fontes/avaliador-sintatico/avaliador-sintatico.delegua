@@ -2,13 +2,6 @@ importar { Simbolo } de "../lexador/simbolo.delegua"
 importar { ErroAvaliadorSintatico } de "./erro-avaliador-sintatico.delegua"
 importar { RetornoAvaliadorSintatico } de "./retorno-avaliador-sintatico.delegua"
 importar { TiposSimbolos } de "../lexador/tipos-simbolos.delegua"
-importar { Literal } de "../construtos/literal.delegua"
-importar { Variavel } de "../construtos/variavel.delegua"
-importar { Agrupamento } de "../construtos/agrupamento.delegua"
-importar { Chamada } de "../construtos/chamada.delegua"
-importar { Unario } de "../construtos/unario.delegua"
-importar { Binario } de "../construtos/binario.delegua"
-importar { Logico } de "../construtos/logico.delegua"
 importar { Construto } de "../construtos/construto.delegua"
 importar { Declaracao } de "../declaracoes/declaracao.delegua"
 
@@ -63,7 +56,7 @@ classe AvaliadorSintatico {
         retorna falso
     }
 
-    verificarSeSimboloAtualCorresponde(tiposEsperados: qualquer): lógico {
+    verificarSeSimboloAtualCorresponde(tiposEsperados: texto[]): lógico {
         var indice: inteiro = 0
         enquanto indice < tiposEsperados.tamanho() {
             se isto.verificarSeSimboloAtualEIgualA(tiposEsperados[indice]) {
@@ -91,39 +84,62 @@ classe AvaliadorSintatico {
         retorna isto.simboloAtual()
     }
 
-    analisarPrimario(): qualquer {
+    analisarPrimario(): Construto {
         se isto.verificarSeSimboloAtualEIgualA(isto.tipos.FALSO) {
-            retorna Literal(falso)
+            var noFalso: Construto = Construto("Literal")
+            noFalso.tipoLiteral = "logico"
+            noFalso.literalLogico = falso
+            retorna noFalso
         }
 
         se isto.verificarSeSimboloAtualEIgualA(isto.tipos.VERDADEIRO) {
-            retorna Literal(verdadeiro)
+            var noVerdadeiro: Construto = Construto("Literal")
+            noVerdadeiro.tipoLiteral = "logico"
+            noVerdadeiro.literalLogico = verdadeiro
+            retorna noVerdadeiro
         }
 
         se isto.verificarSeSimboloAtualEIgualA(isto.tipos.NULO) {
-            retorna Literal(nulo)
+            var noNulo: Construto = Construto("Literal")
+            noNulo.tipoLiteral = "nulo"
+            retorna noNulo
         }
 
         se isto.verificarSeSimboloAtualCorresponde([isto.tipos.NUMERO, isto.tipos.TEXTO]) {
-            retorna Literal(isto.simboloAnterior().lexema)
+            var simboloLiteral: Simbolo = isto.simboloAnterior()
+            var noLiteral: Construto = Construto("Literal")
+            se simboloLiteral._tipo == isto.tipos.NUMERO {
+                noLiteral.tipoLiteral = "numero"
+                noLiteral.literalNumero = numero(simboloLiteral.lexema)
+            } senao {
+                noLiteral.tipoLiteral = "texto"
+                noLiteral.literalTexto = simboloLiteral.lexema
+            }
+            retorna noLiteral
         }
 
-        se isto.verificarSeSimboloAtualEIgualA(isto.tipos.IDENTIFICADOR) {
-            retorna Variavel(isto.simboloAnterior())
+        // ESCREVA/TIPO são palavras reservadas no lexador, mas funcionam como nomes de
+        // função nativa comum (ver Interpretador.chamarNativo) — tratadas como identificador.
+        se isto.verificarSeSimboloAtualCorresponde([isto.tipos.IDENTIFICADOR, isto.tipos.ESCREVA, isto.tipos.TIPO]) {
+            var noVariavel: Construto = Construto("Variavel")
+            noVariavel.simbolo = isto.simboloAnterior()
+            retorna noVariavel
         }
 
         se isto.verificarSeSimboloAtualEIgualA(isto.tipos.PARENTESE_ESQUERDO) {
-            var expressao: qualquer = isto.analisarExpressao()
+            var expressao: Construto = isto.analisarExpressao()
             isto.consumir(isto.tipos.PARENTESE_DIREITO, "Esperado ')' após expressão.")
-            retorna Agrupamento(expressao)
+            var noAgrupamento: Construto = Construto("Agrupamento")
+            noAgrupamento.expressao = expressao
+            retorna noAgrupamento
         }
 
         isto.erro(isto.simboloAtual(), "Esperada expressão.")
         retorna nulo
     }
 
-    analisarChamada(): qualquer {
-        var expressao: qualquer = isto.analisarPrimario()
+    analisarChamada(): Construto {
+        var expressao: Construto = isto.analisarPrimario()
         se expressao == nulo {
             retorna nulo
         }
@@ -131,12 +147,12 @@ classe AvaliadorSintatico {
         var continuarChamando: lógico = verdadeiro
         enquanto continuarChamando {
             se isto.verificarSeSimboloAtualEIgualA(isto.tipos.PARENTESE_ESQUERDO) {
-                var argumentos: qualquer[] = []
+                var argumentos: Construto[] = []
 
                 se nao isto.verificarTipoSimboloAtual(isto.tipos.PARENTESE_DIREITO) {
                     var lerMaisArgumentos: lógico = verdadeiro
                     enquanto lerMaisArgumentos {
-                        var argumento: qualquer = isto.analisarExpressao()
+                        var argumento: Construto = isto.analisarExpressao()
                         se argumento == nulo {
                             retorna nulo
                         }
@@ -147,7 +163,10 @@ classe AvaliadorSintatico {
                 }
 
                 isto.consumir(isto.tipos.PARENTESE_DIREITO, "Esperado ')' após argumentos.")
-                expressao = Chamada(expressao, argumentos)
+                var noChamada: Construto = Construto("Chamada")
+                noChamada.entidadeChamada = expressao
+                noChamada.argumentos = argumentos
+                expressao = noChamada
             } senao {
                 continuarChamando = falso
             }
@@ -156,41 +175,49 @@ classe AvaliadorSintatico {
         retorna expressao
     }
 
-    analisarUnario(): qualquer {
+    analisarUnario(): Construto {
         se isto.verificarSeSimboloAtualCorresponde([isto.tipos.NEGACAO, isto.tipos.SUBTRACAO]) {
             var operadorAtual: Simbolo = isto.simboloAnterior()
-            var direita: qualquer = isto.analisarUnario()
+            var direita: Construto = isto.analisarUnario()
             se direita == nulo {
                 retorna nulo
             }
 
-            retorna Unario(operadorAtual, direita, "ANTES")
+            var noUnario: Construto = Construto("Unario")
+            noUnario.simboloOperador = operadorAtual
+            noUnario.operando = direita
+            noUnario.posicaoUnario = "ANTES"
+            retorna noUnario
         }
 
         retorna isto.analisarChamada()
     }
 
-    analisarExponenciacao(): qualquer {
-        var expressao: qualquer = isto.analisarUnario()
+    analisarExponenciacao(): Construto {
+        var expressao: Construto = isto.analisarUnario()
         se expressao == nulo {
             retorna nulo
         }
 
         enquanto isto.verificarSeSimboloAtualEIgualA(isto.tipos.EXPONENCIACAO) {
             var operadorAtual: Simbolo = isto.simboloAnterior()
-            var direita: qualquer = isto.analisarExponenciacao()
+            var direita: Construto = isto.analisarExponenciacao()
             se direita == nulo {
                 retorna nulo
             }
 
-            expressao = Binario(expressao, operadorAtual, direita)
+            var noBinario: Construto = Construto("Binario")
+            noBinario.esquerda = expressao
+            noBinario.simboloOperador = operadorAtual
+            noBinario.direita = direita
+            expressao = noBinario
         }
 
         retorna expressao
     }
 
-    analisarFator(): qualquer {
-        var expressao: qualquer = isto.analisarExponenciacao()
+    analisarFator(): Construto {
+        var expressao: Construto = isto.analisarExponenciacao()
         se expressao == nulo {
             retorna nulo
         }
@@ -202,38 +229,46 @@ classe AvaliadorSintatico {
             isto.tipos.MODULO
         ]) {
             var operadorAtual: Simbolo = isto.simboloAnterior()
-            var direita: qualquer = isto.analisarExponenciacao()
+            var direita: Construto = isto.analisarExponenciacao()
             se direita == nulo {
                 retorna nulo
             }
 
-            expressao = Binario(expressao, operadorAtual, direita)
+            var noBinario: Construto = Construto("Binario")
+            noBinario.esquerda = expressao
+            noBinario.simboloOperador = operadorAtual
+            noBinario.direita = direita
+            expressao = noBinario
         }
 
         retorna expressao
     }
 
-    analisarTermo(): qualquer {
-        var expressao: qualquer = isto.analisarFator()
+    analisarTermo(): Construto {
+        var expressao: Construto = isto.analisarFator()
         se expressao == nulo {
             retorna nulo
         }
 
         enquanto isto.verificarSeSimboloAtualCorresponde([isto.tipos.ADICAO, isto.tipos.SUBTRACAO]) {
             var operadorAtual: Simbolo = isto.simboloAnterior()
-            var direita: qualquer = isto.analisarFator()
+            var direita: Construto = isto.analisarFator()
             se direita == nulo {
                 retorna nulo
             }
 
-            expressao = Binario(expressao, operadorAtual, direita)
+            var noBinario: Construto = Construto("Binario")
+            noBinario.esquerda = expressao
+            noBinario.simboloOperador = operadorAtual
+            noBinario.direita = direita
+            expressao = noBinario
         }
 
         retorna expressao
     }
 
-    analisarComparacao(): qualquer {
-        var expressao: qualquer = isto.analisarTermo()
+    analisarComparacao(): Construto {
+        var expressao: Construto = isto.analisarTermo()
         se expressao == nulo {
             retorna nulo
         }
@@ -245,111 +280,132 @@ classe AvaliadorSintatico {
             isto.tipos.MENOR_IGUAL
         ]) {
             var operadorAtual: Simbolo = isto.simboloAnterior()
-            var direita: qualquer = isto.analisarTermo()
+            var direita: Construto = isto.analisarTermo()
             se direita == nulo {
                 retorna nulo
             }
 
-            expressao = Binario(expressao, operadorAtual, direita)
+            var noBinario: Construto = Construto("Binario")
+            noBinario.esquerda = expressao
+            noBinario.simboloOperador = operadorAtual
+            noBinario.direita = direita
+            expressao = noBinario
         }
 
         retorna expressao
     }
 
-    analisarIgualdade(): qualquer {
-        var expressao: qualquer = isto.analisarComparacao()
+    analisarIgualdade(): Construto {
+        var expressao: Construto = isto.analisarComparacao()
         se expressao == nulo {
             retorna nulo
         }
 
         enquanto isto.verificarSeSimboloAtualCorresponde([isto.tipos.DIFERENTE, isto.tipos.IGUAL_IGUAL]) {
             var operadorAtual: Simbolo = isto.simboloAnterior()
-            var direita: qualquer = isto.analisarComparacao()
+            var direita: Construto = isto.analisarComparacao()
             se direita == nulo {
                 retorna nulo
             }
 
-            expressao = Binario(expressao, operadorAtual, direita)
+            var noBinario: Construto = Construto("Binario")
+            noBinario.esquerda = expressao
+            noBinario.simboloOperador = operadorAtual
+            noBinario.direita = direita
+            expressao = noBinario
         }
 
         retorna expressao
     }
 
-    analisarELogico(): qualquer {
-        var expressao: qualquer = isto.analisarIgualdade()
+    analisarELogico(): Construto {
+        var expressao: Construto = isto.analisarIgualdade()
         se expressao == nulo {
             retorna nulo
         }
 
         enquanto isto.verificarSeSimboloAtualEIgualA(isto.tipos.E) {
             var operadorAtual: Simbolo = isto.simboloAnterior()
-            var direita: qualquer = isto.analisarIgualdade()
+            var direita: Construto = isto.analisarIgualdade()
             se direita == nulo {
                 retorna nulo
             }
 
-            expressao = Logico(expressao, operadorAtual, direita)
+            var noLogico: Construto = Construto("Logico")
+            noLogico.esquerda = expressao
+            noLogico.simboloOperador = operadorAtual
+            noLogico.direita = direita
+            expressao = noLogico
         }
 
         retorna expressao
     }
 
-    analisarOuLogico(): qualquer {
-        var expressao: qualquer = isto.analisarELogico()
+    analisarOuLogico(): Construto {
+        var expressao: Construto = isto.analisarELogico()
         se expressao == nulo {
             retorna nulo
         }
 
         enquanto isto.verificarSeSimboloAtualEIgualA(isto.tipos.OU) {
             var operadorAtual: Simbolo = isto.simboloAnterior()
-            var direita: qualquer = isto.analisarELogico()
+            var direita: Construto = isto.analisarELogico()
             se direita == nulo {
                 retorna nulo
             }
 
-            expressao = Logico(expressao, operadorAtual, direita)
+            var noLogico: Construto = Construto("Logico")
+            noLogico.esquerda = expressao
+            noLogico.simboloOperador = operadorAtual
+            noLogico.direita = direita
+            expressao = noLogico
         }
 
         retorna expressao
     }
 
-    analisarAtribuicao(): qualquer {
-        var expressao: qualquer = isto.analisarOuLogico()
+    analisarAtribuicao(): Construto {
+        var expressao: Construto = isto.analisarOuLogico()
         se expressao == nulo {
             retorna nulo
         }
 
         se isto.verificarSeSimboloAtualEIgualA(isto.tipos.IGUAL) {
-            var valor: qualquer = isto.analisarAtribuicao()
+            var valor: Construto = isto.analisarAtribuicao()
             se valor == nulo {
                 retorna nulo
             }
 
-            retorna Construto("Atribuicao", [expressao, valor])
+            var noAtribuicao: Construto = Construto("Atribuicao")
+            noAtribuicao.alvoAtribuicao = expressao
+            noAtribuicao.valorAtribuicao = valor
+            retorna noAtribuicao
         }
 
         retorna expressao
     }
 
-    analisarExpressao(): qualquer {
+    analisarExpressao(): Construto {
         retorna isto.analisarAtribuicao()
     }
 
-    analisarComandoExpressao(): qualquer {
-        var expressao: qualquer = isto.analisarExpressao()
+    analisarComandoExpressao(): Declaracao {
+        var expressao: Construto = isto.analisarExpressao()
         se expressao == nulo {
             retorna nulo
         }
 
         isto.consumir(isto.tipos.PONTO_E_VIRGULA, "Esperado ';' após expressão.")
-        retorna Declaracao("ComandoExpressao", expressao)
+        var noComando: Declaracao = Declaracao("ComandoExpressao")
+        noComando.expressaoComando = expressao
+        retorna noComando
     }
 
-    analisarBloco(): qualquer {
-        var declaracoes: qualquer[] = []
+    analisarBloco(): Declaracao {
+        var declaracoes: Declaracao[] = []
 
         enquanto nao isto.verificarTipoSimboloAtual(isto.tipos.CHAVE_DIREITA) e nao isto.terminou() {
-            var declaracao: qualquer = isto.analisarDeclaracao()
+            var declaracao: Declaracao = isto.analisarDeclaracao()
             se declaracao == nulo {
                 retorna nulo
             }
@@ -357,13 +413,15 @@ classe AvaliadorSintatico {
         }
 
         isto.consumir(isto.tipos.CHAVE_DIREITA, "Esperado '}' após bloco.")
-        retorna Declaracao("ComandoBloco", declaracoes)
+        var noBloco: Declaracao = Declaracao("ComandoBloco")
+        noBloco.blocoDeclaracoes = declaracoes
+        retorna noBloco
     }
 
-    analisarDeclaracaoVariavel(): qualquer {
+    analisarDeclaracaoVariavel(): Declaracao {
         var nome: Simbolo = isto.consumir(isto.tipos.IDENTIFICADOR, "Esperado nome da variável.")
 
-        var inicializador: qualquer = nulo
+        var inicializador: Construto = nulo
         se isto.verificarSeSimboloAtualEIgualA(isto.tipos.IGUAL) {
             inicializador = isto.analisarExpressao()
             se inicializador == nulo {
@@ -372,10 +430,13 @@ classe AvaliadorSintatico {
         }
 
         isto.consumir(isto.tipos.PONTO_E_VIRGULA, "Esperado ';' após declaração de variável.")
-        retorna Declaracao("DeclaracaoVariavel", [nome, inicializador])
+        var noDeclaracaoVariavel: Declaracao = Declaracao("DeclaracaoVariavel")
+        noDeclaracaoVariavel.variavelNome = nome
+        noDeclaracaoVariavel.variavelInicializador = inicializador
+        retorna noDeclaracaoVariavel
     }
 
-    analisarComando(): qualquer {
+    analisarComando(): Declaracao {
         se isto.verificarSeSimboloAtualEIgualA(isto.tipos.CHAVE_ESQUERDA) {
             retorna isto.analisarBloco()
         }
@@ -383,7 +444,7 @@ classe AvaliadorSintatico {
         retorna isto.analisarComandoExpressao()
     }
 
-    analisarDeclaracao(): qualquer {
+    analisarDeclaracao(): Declaracao {
         se isto.verificarSeSimboloAtualEIgualA(isto.tipos.VARIAVEL) {
             retorna isto.analisarDeclaracaoVariavel()
         }
@@ -396,10 +457,10 @@ classe AvaliadorSintatico {
         isto.erros = []
         isto.atual = 0
 
-        var declaracoes: qualquer[] = []
+        var declaracoes: Declaracao[] = []
         var continuarAnalisando: lógico = verdadeiro
         enquanto continuarAnalisando e nao isto.terminou() {
-            var declaracao: qualquer = isto.analisarDeclaracao()
+            var declaracao: Declaracao = isto.analisarDeclaracao()
             se declaracao == nulo {
                 continuarAnalisando = falso
             } senao {
@@ -414,5 +475,9 @@ classe AvaliadorSintatico {
             retorno.erros.adicionar(erro.paraTexto())
         }
         retorna retorno
+    }
+
+    mapear(simbolos: Simbolo[]) {
+        // AFAZER: Implementar corpo de `mapear`.
     }
 }

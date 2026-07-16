@@ -1,0 +1,101 @@
+funcao literal(valor) {
+  retornar {
+    "tipo": "Literal",
+    "valor": valor
+  };
+}
+
+funcao _variavel(nome) {
+  retornar {
+    "tipo": "Variavel",
+    "nome": nome
+  };
+}
+
+funcao atribuicao(nome, valor) {
+  retornar {
+    "tipo": "Atribuicao",
+    "nome": nome,
+    "valor": valor
+  };
+}
+
+funcao binario(esquerda, _operador, direita) {
+  retornar {
+    "tipo": "Binario",
+    "esquerda": esquerda,
+    "operador": _operador,
+    "direita": direita
+  };
+}
+
+funcao unario(_operador, direita) {
+  retornar {
+    "tipo": "Unario",
+    "operador": _operador,
+    "direita": direita
+  };
+}
+
+funcao chamada(alvo, argumentos) {
+  retornar {
+    "tipo": "Chamada",
+    "alvo": alvo,
+    "argumentos": argumentos
+  };
+}
+
+funcao declaracao_variavel(nome, inicializador) {
+  retornar {
+    "tipo": "DeclaracaoVariavel",
+    "nome": nome,
+    "inicializador": inicializador
+  };
+}
+
+funcao declaracao_funcao(nome, parametros, corpo) {
+  retornar {
+    "tipo": "DeclaracaoFuncao",
+    "nome": nome,
+    "parametros": parametros,
+    "corpo": corpo
+  };
+}
+
+funcao comando_expressao(expressao) {
+  retornar {
+    "tipo": "ComandoExpressao",
+    "expressao": expressao
+  };
+}
+
+funcao comando_bloco(declaracoes) {
+  retornar {
+    "tipo": "ComandoBloco",
+    "declaracoes": declaracoes
+  };
+}
+
+funcao comando_se(condicao, entao, _senao) {
+  retornar {
+    "tipo": "ComandoSe",
+    "condicao": condicao,
+    "entao": entao,
+    "senao": _senao
+  };
+}
+
+funcao comando_enquanto(condicao, corpo) {
+  retornar {
+    "tipo": "ComandoEnquanto",
+    "condicao": condicao,
+    "corpo": corpo
+  };
+}
+
+funcao comando_retornar(valor) {
+  retornar {
+    "tipo": "ComandoRetornar",
+    "valor": valor
+  };
+}

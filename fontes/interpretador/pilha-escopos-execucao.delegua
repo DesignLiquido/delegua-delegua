@@ -1,0 +1,97 @@
+importar { EspacoMemoria } de "./espaco-memoria.delegua"
+
+classe PilhaEscoposExecucao {
+    pilha: EspacoMemoria[]
+    topo: inteiro
+
+    construtor() {
+        isto.pilha = []
+        isto.topo = -1
+    }
+
+    empilhar(escopoMemoria: EspacoMemoria) {
+        isto.topo = isto.topo + 1
+        isto.pilha[isto.topo] = escopoMemoria
+    }
+
+    eVazio(): lógico {
+        retorna isto.topo < 0
+    }
+
+    elementos(): inteiro {
+        retorna isto.topo + 1
+    }
+
+    naPosicao(posicao: inteiro): EspacoMemoria {
+        retorna isto.pilha[posicao]
+    }
+
+    topoDaPilha(): EspacoMemoria {
+        se isto.eVazio() {
+            falhar("Pilha de escopos vazia.")
+        }
+        retorna isto.pilha[isto.topo]
+    }
+
+    removerUltimo(): EspacoMemoria {
+        se isto.eVazio() {
+            falhar("Pilha de escopos vazia.")
+        }
+        var ultimo: EspacoMemoria = isto.pilha[isto.topo]
+        isto.pilha[isto.topo] = nulo
+        isto.topo = isto.topo - 1
+        retorna ultimo
+    }
+
+    definirVariavel(nome: texto, valor: dicionário) {
+        var wrapper: dicionário = {}
+        wrapper["valor"] = valor
+        wrapper["imutavel"] = falso
+        isto.topoDaPilha().valores[nome] = wrapper
+    }
+
+    definirConstante(nome: texto, valor: dicionário) {
+        var wrapper: dicionário = {}
+        wrapper["valor"] = valor
+        wrapper["imutavel"] = verdadeiro
+        isto.topoDaPilha().valores[nome] = wrapper
+    }
+
+    atribuirVariavel(nome: texto, valor: dicionário) {
+        var i: inteiro = isto.topo
+        enquanto i >= 0 {
+            var espaco: EspacoMemoria = isto.pilha[i]
+            se espaco.valores[nome] != nulo {
+                var wrapper: dicionário = espaco.valores[nome]
+                var imutavel: lógico = wrapper["imutavel"]
+                se imutavel {
+                    falhar("Constante '" + nome + "' não pode receber novos valores.")
+                }
+                var novoWrapper: dicionário = {}
+                novoWrapper["valor"] = valor
+                novoWrapper["imutavel"] = falso
+                espaco.valores[nome] = novoWrapper
+                retorna
+            }
+            i = i - 1
+        }
+        falhar("Variável não definida: '" + nome + "'.")
+    }
+
+    obterVariavelPorNome(nome: texto): dicionário {
+        var i: inteiro = isto.topo
+        enquanto i >= 0 {
+            var espaco: EspacoMemoria = isto.pilha[i]
+            se espaco.valores[nome] != nulo {
+                retorna espaco.valores[nome]
+            }
+            i = i - 1
+        }
+        falhar("Variável não definida: '" + nome + "'.")
+    }
+
+    obterValorVariavel(nome: texto): dicionário {
+        var wrapper: dicionário = isto.obterVariavelPorNome(nome)
+        retorna wrapper["valor"]
+    }
+}

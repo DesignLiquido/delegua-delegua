@@ -1,0 +1,65 @@
+importar "./erros.delegua";
+
+funcao novo_resultado_caso(nome, categoria, aprovado, detalhe) {
+  retornar {
+    nome: nome,
+    categoria: categoria,
+    aprovado: aprovado,
+    detalhe: detalhe
+  };
+}
+
+funcao gerar_relatorio_marcacao(resultados) {
+  var total = tamanho(resultados);
+  var aprovados = 0;
+  var indice = 0;
+
+  enquanto indice < total {
+    se resultados[indice].aprovado { aprovados = aprovados + 1; }
+    indice = indice + 1;
+  }
+
+  var linhas = [];
+  linhas.adicionar("# Relatório de Conformidade (MVP)");
+  linhas.adicionar("");
+  linhas.adicionar(concatenar("- Total: ", texto(total)));
+  linhas.adicionar(concatenar("- Aprovados: ", texto(aprovados)));
+  linhas.adicionar(concatenar("- Reprovados: ", texto(total - aprovados)));
+  linhas.adicionar("");
+  linhas.adicionar("| Caso | Categoria | Situação | Detalhe |");
+  linhas.adicionar("|---|---|---|---|");
+
+  indice = 0;
+  enquanto indice < total {
+    var caso = resultados[indice];
+    var situacao = "OK";
+    se nao caso.aprovado { situacao = "FALHA"; }
+    var linha = concatenar(
+      concatenar(
+        concatenar(
+          concatenar("| ", caso.nome),
+          concatenar(" | ", caso.categoria)
+        ),
+        concatenar(" | ", situacao)
+      ),
+      concatenar(" | ", concatenar(caso.detalhe, " |"))
+    );
+    linhas.adicionar(linha);
+    indice = indice + 1;
+  }
+
+  retornar linhas;
+}
+
+funcao executar_validador() {
+  // Implementação completa depende das APIs de arquivo do motor hospedeiro.
+  // Este MVP define o contrato de entradas e saídas do validador.
+  var resultado = {
+    total: 0,
+    aprovados: 0,
+    falhos: 0,
+    relatorio: gerar_relatorio_marcacao([])
+  };
+
+  retornar resultado;
+}

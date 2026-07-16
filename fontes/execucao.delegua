@@ -1,6 +1,11 @@
-importar { MicroLexador } de "./lexador/micro-lexador.delegua"
+importar { Lexador } de "./lexador/lexador.delegua"
 importar { RetornoLexador } de "./lexador/retorno-lexador.delegua"
+importar { AvaliadorSintatico } de "./avaliador-sintatico/avaliador-sintatico.delegua"
+importar { Interpretador } de "./interpretador/interpretador.delegua"
 
-var lexador: MicroLexador = MicroLexador()
-var resultado: RetornoLexador = lexador.mapear("escreva('Olá, mundo!')")
-escreva(resultado.paraTexto())
+var lexador: Lexador = Lexador()
+var retornoLexador: RetornoLexador = lexador.mapear("escreva(2 + 5 * 10 / 4 - 3)")
+const avaliadorSintatico: AvaliadorSintatico = AvaliadorSintatico()
+const retornoAvaliadorSintatico = avaliadorSintatico.analisar(retornoLexador.simbolos)
+var interpretador: Interpretador = Interpretador()
+interpretador.interpretar(retornoAvaliadorSintatico.declaracoes)

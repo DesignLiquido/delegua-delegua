@@ -450,7 +450,7 @@ classe Lexador {
                 } senão se isto.eAlfabeto(caractere) {
                     isto.identificarPalavraChave()
                 } senão {
-                    var novoErro: ErroLexador = ErroLexador("Caractere inesperado.", isto.linha + 1)
+                    var novoErro: ErroLexador = ErroLexador("Caractere inesperado: ${caractere}", isto.linha + 1)
                     isto.erros.adicionar(novoErro)
                     isto.avancar()
                 }

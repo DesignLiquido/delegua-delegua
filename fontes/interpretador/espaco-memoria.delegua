@@ -1,0 +1,7 @@
+classe EspacoMemoria {
+    valores: dicionário
+
+    construtor() {
+        isto.valores = {}
+    }
+}

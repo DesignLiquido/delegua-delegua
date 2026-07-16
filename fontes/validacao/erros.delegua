@@ -1,0 +1,17 @@
+funcao formatar_erro(erro) {
+  var cabecalho = concatenar(
+    concatenar(
+      concatenar(
+        concatenar("[", erro.codigo),
+        "] "
+      ),
+      erro.posicao.arquivo
+    ),
+    concatenar(
+      concatenar(":", texto(erro.posicao.linha)),
+      concatenar(":", texto(erro.posicao.coluna))
+    )
+  );
+
+  retornar concatenar(cabecalho, concatenar(" ", erro.mensagem));
+}
