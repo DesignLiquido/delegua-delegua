@@ -3,8 +3,19 @@ importar { RetornoLexador } de "./lexador/retorno-lexador.delegua"
 importar { AvaliadorSintatico } de "./avaliador-sintatico/avaliador-sintatico.delegua"
 importar { Interpretador } de "./interpretador/interpretador.delegua"
 
+var arq = importar("arquivos")
+var arg = importar("argumentos")
+
+var caminhoArquivoFonte: texto = arg.argumento(0)
+se caminhoArquivoFonte == "" {
+    caminhoArquivoFonte = "exemplos/ola-mundo.delegua"
+}
+
+var arquivoFonte: texto = arq.abrir(caminhoArquivoFonte)
+var codigoFonte: texto = arq.paraTexto(arquivoFonte)
+
 var lexador: Lexador = Lexador()
-var retornoLexador: RetornoLexador = lexador.mapear("escreva(2 + 5 * 10 / 4 - 3)")
+var retornoLexador: RetornoLexador = lexador.mapear(codigoFonte, 0)
 const avaliadorSintatico: AvaliadorSintatico = AvaliadorSintatico()
 const retornoAvaliadorSintatico = avaliadorSintatico.analisar(retornoLexador.simbolos)
 var interpretador: Interpretador = Interpretador()
