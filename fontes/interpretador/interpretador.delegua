@@ -43,6 +43,11 @@ classe Interpretador {
         fnInteiro._nativo = verdadeiro
         fnInteiro._nome = "inteiro"
         isto.pilha.definirVariavel("inteiro", fnInteiro)
+
+        var fnLeia: dicionário = {}
+        fnLeia._nativo = verdadeiro
+        fnLeia._nome = "leia"
+        isto.pilha.definirVariavel("leia", fnLeia)
     }
 
     // Cria um valor dinâmico com discriminante explícito. "tipo" é um dos
@@ -107,6 +112,12 @@ classe Interpretador {
             var i: inteiro = n
             var iNum: número = i
             retorna isto.criarValor("numero", iNum)
+        }
+        se nome == "leia" {
+            se args.tamanho() > 0 {
+                retorna isto.criarValor("texto", leia(isto.paraTextoExibicao(args[0])))
+            }
+            retorna isto.criarValor("texto", leia())
         }
         falhar("Função nativa não encontrada: " + nome)
         retorna nulo

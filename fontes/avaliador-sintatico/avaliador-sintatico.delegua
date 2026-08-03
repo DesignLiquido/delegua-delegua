@@ -118,9 +118,9 @@ classe AvaliadorSintatico {
             retorna noLiteral
         }
 
-        // ESCREVA/TIPO são palavras reservadas no lexador, mas funcionam como nomes de
+        // ESCREVA/TIPO/LEIA são palavras reservadas no lexador, mas funcionam como nomes de
         // função nativa comum (ver Interpretador.chamarNativo) — tratadas como identificador.
-        se isto.verificarSeSimboloAtualCorresponde([isto.tipos.IDENTIFICADOR, isto.tipos.ESCREVA, isto.tipos.TIPO]) {
+        se isto.verificarSeSimboloAtualCorresponde([isto.tipos.IDENTIFICADOR, isto.tipos.ESCREVA, isto.tipos.TIPO, isto.tipos.LEIA]) {
             var noVariavel: Construto = Construto("Variavel")
             noVariavel.simbolo = isto.simboloAnterior()
             retorna noVariavel
