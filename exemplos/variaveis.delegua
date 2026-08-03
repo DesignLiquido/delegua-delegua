@@ -3,4 +3,4 @@ var y = 3;
 escreva(x + y);
 escreva(x - y);
 escreva(x * y);
-escreva(concatenar("resultado: ", texto(x + y)));
+escreva("resultado: " + texto(x + y));

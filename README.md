@@ -18,11 +18,15 @@ Este projeto organiza o caminho para:
 
 ## Configuração inicial
 
-```bash
-npm install
-npm run desenvolver
-npm run verificar
+Projeto sem Node/npm (não há `package.json`). Compilação via toolchain LLVM de Delégua, orientada por `configuracao.delprops`:
+
+```properties
+compilacao.arquivoSaida=deldel
+compilacao.pontoEntrada=fontes/execucao.delegua
+compilacao.emitirDebug=verdadeiro
 ```
+
+Comando exato do compilador ainda não documentado neste repositório.
 
 ## Documentação
 
