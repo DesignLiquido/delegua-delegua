@@ -1,5 +1,6 @@
 importar { EspacoMemoria } de "./espaco-memoria.delegua"
 importar { PilhaEscoposExecucao } de "./pilha-escopos-execucao.delegua"
+importar { ValorFuncao } de "./valor-funcao.delegua"
 importar { Construto } de "../construtos/construto.delegua"
 importar { Declaracao } de "../declaracoes/declaracao.delegua"
 
@@ -13,41 +14,21 @@ classe Interpretador {
         isto.registrarBuiltins()
     }
 
+    // Registra cada nativa como um valor comum (tipo "nativa", valor = seu próprio
+    // nome), na mesma convenção de criarValor usada para "funcao" — evita comparar um
+    // campo lógico lido de dicionário contra `verdadeiro`/`falso` inline (sem passar por
+    // uma variável concreta primeiro), que na prática nunca compara igual quando
+    // compilado (o valor lido continua embalado; só desembala ao ser atribuído a uma
+    // variável de tipo escalar concreto). Comparação de "tipo" (texto) já é usada em
+    // todo o resto do interpretador e funciona de forma confiável.
     registrarBuiltins() {
-        var fnEscreva: dicionário = {}
-        fnEscreva._nativo = verdadeiro
-        fnEscreva._nome = "escreva"
-        isto.pilha.definirVariavel("escreva", fnEscreva)
-
-        var fnConcatenar: dicionário = {}
-        fnConcatenar._nativo = verdadeiro
-        fnConcatenar._nome = "concatenar"
-        isto.pilha.definirVariavel("concatenar", fnConcatenar)
-
-        var fnTexto: dicionário = {}
-        fnTexto._nativo = verdadeiro
-        fnTexto._nome = "texto"
-        isto.pilha.definirVariavel("texto", fnTexto)
-
-        var fnNumero: dicionário = {}
-        fnNumero._nativo = verdadeiro
-        fnNumero._nome = "numero"
-        isto.pilha.definirVariavel("numero", fnNumero)
-
-        var fnTipo: dicionário = {}
-        fnTipo._nativo = verdadeiro
-        fnTipo._nome = "tipo"
-        isto.pilha.definirVariavel("tipo", fnTipo)
-
-        var fnInteiro: dicionário = {}
-        fnInteiro._nativo = verdadeiro
-        fnInteiro._nome = "inteiro"
-        isto.pilha.definirVariavel("inteiro", fnInteiro)
-
-        var fnLeia: dicionário = {}
-        fnLeia._nativo = verdadeiro
-        fnLeia._nome = "leia"
-        isto.pilha.definirVariavel("leia", fnLeia)
+        isto.pilha.definirVariavel("escreva", isto.criarValor("nativa", "escreva"))
+        isto.pilha.definirVariavel("concatenar", isto.criarValor("nativa", "concatenar"))
+        isto.pilha.definirVariavel("texto", isto.criarValor("nativa", "texto"))
+        isto.pilha.definirVariavel("numero", isto.criarValor("nativa", "numero"))
+        isto.pilha.definirVariavel("tipo", isto.criarValor("nativa", "tipo"))
+        isto.pilha.definirVariavel("inteiro", isto.criarValor("nativa", "inteiro"))
+        isto.pilha.definirVariavel("leia", isto.criarValor("nativa", "leia"))
     }
 
     // Cria um valor dinâmico com discriminante explícito. "tipo" é um dos
@@ -123,6 +104,23 @@ classe Interpretador {
         retorna nulo
     }
 
+    // Sinal de controle de fluxo (usado para propagar `retornar` por blocos e
+    // laços sem suporte a exceções): um dicionário comum, distinguido pela
+    // chave `_controle`, nunca confundido com um valor de dado normal (que
+    // usa a chave `tipo`).
+    criarControle(tipoControle: texto, valor: qualquer): dicionário {
+        var c: dicionário = {}
+        c["_controle"] = tipoControle
+        c["valor"] = valor
+        retorna c
+    }
+
+    eControleRetorno(v: qualquer): lógico {
+        se v == nulo { retorna falso }
+        var d: dicionário = v
+        retorna d["_controle"] == "retornar"
+    }
+
     eVerdadeiro(valor: dicionário): lógico {
         se valor == nulo ou valor["tipo"] == "nulo" { retorna falso }
         se valor["tipo"] == "logico" {
@@ -159,6 +157,10 @@ classe Interpretador {
         se t == "ComandoExpressao" { retorna isto.avaliar(declaracao.expressaoComando) }
         se t == "ComandoBloco" { retorna isto.executarBloco(declaracao.blocoDeclaracoes) }
         se t == "DeclaracaoVariavel" { retorna isto.executarDeclaracaoVariavel(declaracao) }
+        se t == "DeclaracaoFuncao" { retorna isto.executarDeclaracaoFuncao(declaracao) }
+        se t == "ComandoSe" { retorna isto.executarComandoSe(declaracao) }
+        se t == "ComandoEnquanto" { retorna isto.executarComandoEnquanto(declaracao) }
+        se t == "ComandoRetornar" { retorna isto.executarComandoRetornar(declaracao) }
 
         retorna nulo
     }
@@ -170,13 +172,86 @@ classe Interpretador {
 
         var resultado: qualquer = nulo
         var i: inteiro = 0
-        enquanto i < declaracoes.tamanho() {
+        var pararExecucao: lógico = falso
+        enquanto i < declaracoes.tamanho() e nao pararExecucao {
             resultado = isto.executar(declaracoes[i])
+            se isto.eControleRetorno(resultado) {
+                pararExecucao = verdadeiro
+            }
             i = i + 1
         }
 
         isto.pilha.removerUltimo()
         retorna resultado
+    }
+
+    executarComandoSe(declaracao: Declaracao): qualquer {
+        se isto.eVerdadeiro(isto.avaliar(declaracao.condicaoSe)) {
+            retorna isto.executar(declaracao.ramoEntao)
+        } senao se declaracao.ramoSenao != nulo {
+            retorna isto.executar(declaracao.ramoSenao)
+        }
+        retorna nulo
+    }
+
+    executarComandoEnquanto(declaracao: Declaracao): qualquer {
+        var resultado: qualquer = nulo
+        enquanto isto.eVerdadeiro(isto.avaliar(declaracao.condicaoEnquanto)) {
+            resultado = isto.executar(declaracao.corpoEnquanto)
+            se isto.eControleRetorno(resultado) {
+                retorna resultado
+            }
+        }
+        retorna resultado
+    }
+
+    executarComandoRetornar(declaracao: Declaracao): qualquer {
+        var valor: dicionário = isto.criarValor("nulo", nulo)
+        se declaracao.valorRetornar != nulo {
+            valor = isto.avaliar(declaracao.valorRetornar)
+        }
+        retorna isto.criarControle("retornar", valor)
+    }
+
+    executarDeclaracaoFuncao(declaracao: Declaracao): qualquer {
+        var nomesParametros: texto[] = []
+        var i: inteiro = 0
+        enquanto i < declaracao.funcaoParametros.tamanho() {
+            nomesParametros.adicionar(declaracao.funcaoParametros[i].lexema)
+            i = i + 1
+        }
+
+        var dadosFuncao: ValorFuncao = ValorFuncao(nomesParametros, declaracao.funcaoCorpo)
+
+        var valorFuncao: dicionário = isto.criarValor("funcao", dadosFuncao)
+        isto.pilha.definirVariavel(declaracao.funcaoNome.lexema, valorFuncao)
+        retorna nulo
+    }
+
+    chamarFuncaoUsuario(dadosFuncao: ValorFuncao, args: qualquer[]): dicionário {
+        var corpo: Declaracao = dadosFuncao.corpo
+
+        var escopoChamada: EspacoMemoria = EspacoMemoria()
+        isto.pilha.empilhar(escopoChamada)
+
+        var i: inteiro = 0
+        enquanto i < dadosFuncao.parametros.tamanho() {
+            var valorArg: dicionário = isto.criarValor("nulo", nulo)
+            se i < args.tamanho() {
+                valorArg = args[i]
+            }
+            isto.pilha.definirVariavel(dadosFuncao.parametros[i], valorArg)
+            i = i + 1
+        }
+
+        var resultado: qualquer = isto.executar(corpo)
+        isto.pilha.removerUltimo()
+
+        se isto.eControleRetorno(resultado) {
+            var controle: dicionário = resultado
+            retorna controle["valor"]
+        }
+        retorna isto.criarValor("nulo", nulo)
     }
 
     avaliarUnario(no: Construto): dicionário {
@@ -250,11 +325,19 @@ classe Interpretador {
             indiceArg = indiceArg + 1
         }
 
-        // Toda entidade chamável hoje é um nome nativo fixo (não há declaração de
-        // função nem referência indireta a função na gramática atual) — resolve
-        // pelo próprio nome no AST, sem precisar inspecionar o valor em runtime.
         se no.entidadeChamada.noh == "Variavel" {
-            retorna isto.chamarNativo(no.entidadeChamada.simbolo.lexema, args)
+            var nomeChamado: texto = no.entidadeChamada.simbolo.lexema
+            var valorEntidade: dicionário = isto.pilha.obterValorVariavel(nomeChamado)
+
+            se valorEntidade != nulo e valorEntidade["tipo"] == "nativa" {
+                var nomeNativa: texto = valorEntidade["valor"]
+                retorna isto.chamarNativo(nomeNativa, args)
+            }
+            se valorEntidade != nulo e valorEntidade["tipo"] == "funcao" {
+                retorna isto.chamarFuncaoUsuario(valorEntidade["valor"], args)
+            }
+
+            falhar("Entidade não é chamável: '" + nomeChamado + "'.")
         }
 
         falhar("Entidade não é chamável.")

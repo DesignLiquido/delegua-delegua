@@ -1,0 +1,15 @@
+importar { Declaracao } de "../declaracoes/declaracao.delegua"
+
+// Payload de um valor de tipo "funcao" (ver Interpretador.criarValor). Existe como
+// classe — em vez de guardar `parametros`/`corpo` soltos num `dicionário` — porque
+// acesso a campo de classe preserva o tipo estático (`texto[]`, `Declaracao`), o que
+// leitura por chave de `dicionário` não faz (sempre resolve para `qualquer`).
+classe ValorFuncao {
+    parametros: texto[]
+    corpo: Declaracao
+
+    construtor(parametros: texto[], corpo: Declaracao) {
+        isto.parametros = parametros
+        isto.corpo = corpo
+    }
+}

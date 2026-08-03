@@ -16,6 +16,23 @@ classe Declaracao {
     variavelNome: Simbolo
     variavelInicializador: Construto
 
+    // ComandoSe
+    condicaoSe: Construto
+    ramoEntao: Declaracao
+    ramoSenao: Declaracao
+
+    // ComandoEnquanto
+    condicaoEnquanto: Construto
+    corpoEnquanto: Declaracao
+
+    // ComandoRetornar
+    valorRetornar: Construto
+
+    // DeclaracaoFuncao
+    funcaoNome: Simbolo
+    funcaoParametros: Simbolo[]
+    funcaoCorpo: Declaracao
+
     construtor(noh: texto) {
         isto.noh = noh
         isto.linha = 0

@@ -1,4 +1,8 @@
-importar "./erros.delegua";
+importar { formatar_erro } de "./erros.delegua"
+importar { Lexador } de "../lexador/lexador.delegua"
+importar { AvaliadorSintatico } de "../avaliador-sintatico/avaliador-sintatico.delegua"
+
+var arq = importar("arquivos");
 
 funcao novo_resultado_caso(nome, categoria, aprovado, detalhe) {
   retornar {
@@ -51,15 +55,84 @@ funcao gerar_relatorio_marcacao(resultados) {
   retornar linhas;
 }
 
-funcao executar_validador() {
-  // Implementação completa depende das APIs de arquivo do motor hospedeiro.
-  // Este MVP define o contrato de entradas e saídas do validador.
-  var resultado = {
-    total: 0,
-    aprovados: 0,
-    falhos: 0,
-    relatorio: gerar_relatorio_marcacao([])
-  };
+// Lista fixa dos casos em `testes/casos/`. `delegua-arquivos` ainda não expõe
+// uma API de listagem de diretório (ver docs/pendencias-mvp.md), então os
+// arquivos precisam ser declarados aqui manualmente até que ela exista.
+funcao casos_conhecidos() {
+  retornar [
+    {
+      caminho: "testes/casos/expressoes/positivos/aritmetica.delegua",
+      categoria: "expressoes",
+      esperado: "aceitar"
+    },
+    {
+      caminho: "testes/casos/expressoes/negativos/faltando-parentese.delegua",
+      categoria: "expressoes",
+      esperado: "rejeitar"
+    }
+  ];
+}
 
-  retornar resultado;
+// Roda um caso pelo lexador e analisador sintático do MVP e confere se o
+// resultado (aceito sem erros / rejeitado com erros) bate com o esperado.
+funcao executar_caso(entradaCaso) {
+  var caminho: texto = entradaCaso.caminho;
+  var arquivo: texto = arq.abrir(caminho);
+  var codigo: texto = arq.paraTexto(arquivo);
+
+  var lexador = Lexador();
+  var retornoLexador = lexador.mapear(codigo, 0);
+
+  var avaliador = AvaliadorSintatico();
+  var retornoAvaliador = avaliador.analisar(retornoLexador.simbolos);
+
+  var totalErros = tamanho(retornoLexador.erros) + tamanho(retornoAvaliador.erros);
+  var foiAceito = totalErros == 0;
+
+  var aprovado = falso;
+  var detalhe = "";
+
+  se entradaCaso.esperado == "aceitar" {
+    aprovado = foiAceito;
+    se aprovado {
+      detalhe = "Analisado sem erros, como esperado.";
+    } senao {
+      detalhe = concatenar("Esperava análise sem erros, mas houve ", concatenar(texto(totalErros), " erro(s)."));
+    }
+  } senao {
+    aprovado = nao foiAceito;
+    se aprovado {
+      detalhe = concatenar("Rejeitado como esperado, com ", concatenar(texto(totalErros), " erro(s)."));
+    } senao {
+      detalhe = "Esperava rejeição, mas o caso foi aceito sem erros.";
+    }
+  }
+
+  retornar novo_resultado_caso(entradaCaso.caminho, entradaCaso.categoria, aprovado, detalhe);
+}
+
+funcao executar_validador() {
+  var casos = casos_conhecidos();
+  var resultados = [];
+  var total = tamanho(casos);
+  var indice = 0;
+
+  enquanto indice < total {
+    resultados.adicionar(executar_caso(casos[indice]));
+    indice = indice + 1;
+  }
+
+  var aprovados = 0;
+  indice = 0;
+  enquanto indice < total {
+    se resultados[indice].aprovado { aprovados = aprovados + 1; }
+    indice = indice + 1;
+  }
+
+  retornar {
+    total: total,
+    aprovados: aprovados,
+    falhos: total - aprovados,
+    relatorio: gerar_relatorio_marcacao(resultados)
+  };
 }

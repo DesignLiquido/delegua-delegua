@@ -436,15 +436,121 @@ classe AvaliadorSintatico {
         retorna noDeclaracaoVariavel
     }
 
+    analisarComandoSe(): Declaracao {
+        isto.consumir(isto.tipos.PARENTESE_ESQUERDO, "Esperado '(' após 'se'.")
+        var condicao: Construto = isto.analisarExpressao()
+        se condicao == nulo {
+            retorna nulo
+        }
+        isto.consumir(isto.tipos.PARENTESE_DIREITO, "Esperado ')' após condição de 'se'.")
+
+        var ramoEntao: Declaracao = isto.analisarComando()
+        se ramoEntao == nulo {
+            retorna nulo
+        }
+
+        var ramoSenao: Declaracao = nulo
+        se isto.verificarSeSimboloAtualEIgualA(isto.tipos.SENAO) {
+            ramoSenao = isto.analisarComando()
+            se ramoSenao == nulo {
+                retorna nulo
+            }
+        }
+
+        var noSe: Declaracao = Declaracao("ComandoSe")
+        noSe.condicaoSe = condicao
+        noSe.ramoEntao = ramoEntao
+        noSe.ramoSenao = ramoSenao
+        retorna noSe
+    }
+
+    analisarComandoEnquanto(): Declaracao {
+        isto.consumir(isto.tipos.PARENTESE_ESQUERDO, "Esperado '(' após 'enquanto'.")
+        var condicao: Construto = isto.analisarExpressao()
+        se condicao == nulo {
+            retorna nulo
+        }
+        isto.consumir(isto.tipos.PARENTESE_DIREITO, "Esperado ')' após condição de 'enquanto'.")
+
+        var corpo: Declaracao = isto.analisarComando()
+        se corpo == nulo {
+            retorna nulo
+        }
+
+        var noEnquanto: Declaracao = Declaracao("ComandoEnquanto")
+        noEnquanto.condicaoEnquanto = condicao
+        noEnquanto.corpoEnquanto = corpo
+        retorna noEnquanto
+    }
+
+    analisarComandoRetornar(): Declaracao {
+        var valor: Construto = nulo
+        se nao isto.verificarTipoSimboloAtual(isto.tipos.PONTO_E_VIRGULA) {
+            valor = isto.analisarExpressao()
+            se valor == nulo {
+                retorna nulo
+            }
+        }
+
+        isto.consumir(isto.tipos.PONTO_E_VIRGULA, "Esperado ';' após comando 'retornar'.")
+        var noRetornar: Declaracao = Declaracao("ComandoRetornar")
+        noRetornar.valorRetornar = valor
+        retorna noRetornar
+    }
+
     analisarComando(): Declaracao {
         se isto.verificarSeSimboloAtualEIgualA(isto.tipos.CHAVE_ESQUERDA) {
             retorna isto.analisarBloco()
         }
 
+        se isto.verificarSeSimboloAtualEIgualA(isto.tipos.SE) {
+            retorna isto.analisarComandoSe()
+        }
+
+        se isto.verificarSeSimboloAtualEIgualA(isto.tipos.ENQUANTO) {
+            retorna isto.analisarComandoEnquanto()
+        }
+
+        se isto.verificarSeSimboloAtualEIgualA(isto.tipos.RETORNA) {
+            retorna isto.analisarComandoRetornar()
+        }
+
         retorna isto.analisarComandoExpressao()
     }
 
+    analisarDeclaracaoFuncao(): Declaracao {
+        var nome: Simbolo = isto.consumir(isto.tipos.IDENTIFICADOR, "Esperado nome da função.")
+        isto.consumir(isto.tipos.PARENTESE_ESQUERDO, "Esperado '(' após nome da função.")
+
+        var parametros: Simbolo[] = []
+        se nao isto.verificarTipoSimboloAtual(isto.tipos.PARENTESE_DIREITO) {
+            var lerMaisParametros: lógico = verdadeiro
+            enquanto lerMaisParametros {
+                var parametro: Simbolo = isto.consumir(isto.tipos.IDENTIFICADOR, "Esperado nome de parâmetro.")
+                parametros.adicionar(parametro)
+                lerMaisParametros = isto.verificarSeSimboloAtualEIgualA(isto.tipos.VIRGULA)
+            }
+        }
+
+        isto.consumir(isto.tipos.PARENTESE_DIREITO, "Esperado ')' após parâmetros da função.")
+        isto.consumir(isto.tipos.CHAVE_ESQUERDA, "Esperado '{' antes do corpo da função.")
+        var corpo: Declaracao = isto.analisarBloco()
+        se corpo == nulo {
+            retorna nulo
+        }
+
+        var noFuncao: Declaracao = Declaracao("DeclaracaoFuncao")
+        noFuncao.funcaoNome = nome
+        noFuncao.funcaoParametros = parametros
+        noFuncao.funcaoCorpo = corpo
+        retorna noFuncao
+    }
+
     analisarDeclaracao(): Declaracao {
+        se isto.verificarSeSimboloAtualEIgualA(isto.tipos.FUNCAO) {
+            retorna isto.analisarDeclaracaoFuncao()
+        }
+
         se isto.verificarSeSimboloAtualEIgualA(isto.tipos.VARIAVEL) {
             retorna isto.analisarDeclaracaoVariavel()
         }
