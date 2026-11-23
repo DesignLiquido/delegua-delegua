@@ -1,0 +1,69 @@
+{
+  // Nome usado na declaração 'importar': importar { Interpretador } de "delegua"
+  "nome": "delegua",
+  "descricao": "Interpretador de Delégua escrito na própria linguagem Delégua (lexador, avaliador sintático e interpretador).",
+  "versao": "0.1.0",
+
+  // Pacote puramente em Delégua, compilado a partir do fonte pela toolchain LLVM.
+  "realizacoes": ["llvm"],
+
+  // Entrada de biblioteca, sem efeitos colaterais.
+  // O executável `deldel` usa fontes/execucao.delegua (ver configuracao.delprops).
+  "pontoDeEntrada": "fontes/delegua.delegua",
+
+  "dependencias": {},
+
+  "simbolos": [
+    {
+      "tipo": "funcao",
+      "nome": "interpretar_codigo",
+      "tipoRetorno": "qualquer",
+      "argumentos": [{ "nome": "codigo_fonte", "tipo": "texto" }],
+      "documentacao": "Executa código Delégua: lexador, avaliador sintático e interpretador em sequência."
+    },
+    {
+      "tipo": "classe",
+      "nome": "Lexador",
+      "documentacao": "Converte código-fonte Delégua em símbolos. Use `mapear(codigoFonte: texto, hashArquivo: inteiro): RetornoLexador`."
+    },
+    {
+      "tipo": "classe",
+      "nome": "RetornoLexador",
+      "documentacao": "Resultado do lexador: `simbolos` (Simbolo[]) e `erros` (ErroLexador[]).",
+      "argumentos": [
+        { "nome": "simbolos", "tipo": "Simbolo[]" },
+        { "nome": "erros", "tipo": "ErroLexador[]" }
+      ]
+    },
+    {
+      "tipo": "classe",
+      "nome": "AvaliadorSintatico",
+      "documentacao": "Converte símbolos em declarações (AST). Use `analisar(simbolos: Simbolo[]): RetornoAvaliadorSintatico`."
+    },
+    {
+      "tipo": "classe",
+      "nome": "RetornoAvaliadorSintatico",
+      "documentacao": "Resultado do avaliador sintático: `declaracoes` e `erros`."
+    },
+    {
+      "tipo": "classe",
+      "nome": "Interpretador",
+      "documentacao": "Executa declarações produzidas pelo avaliador sintático. Use `interpretar(listaDeclaracoes: Declaracao[]): qualquer`."
+    },
+    {
+      "tipo": "classe",
+      "nome": "Simbolo",
+      "documentacao": "Símbolo léxico (tipo, lexema, literal, linha, hashArquivo)."
+    },
+    {
+      "tipo": "classe",
+      "nome": "ErroLexador",
+      "documentacao": "Erro encontrado durante a análise léxica."
+    },
+    {
+      "tipo": "classe",
+      "nome": "ErroAvaliadorSintatico",
+      "documentacao": "Erro encontrado durante a análise sintática."
+    }
+  ]
+}

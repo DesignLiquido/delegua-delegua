@@ -1,0 +1,26 @@
+// Ponto de entrada do pacote `delegua` na Pacoteca.
+// Expõe as etapas do interpretador auto-hospedado sem efeitos colaterais:
+// quem importa o pacote decide de onde vem o código-fonte e como executá-lo.
+//
+//     importar { Lexador, AvaliadorSintatico, Interpretador } de "delegua"
+//
+// O executável de linha de comando (`deldel`) continua em `execucao.delegua`.
+
+importar { Simbolo } de "./lexador/simbolo.delegua"
+importar { ErroLexador } de "./lexador/erro-lexador.delegua"
+importar { RetornoLexador } de "./lexador/retorno-lexador.delegua"
+importar { Lexador } de "./lexador/lexador.delegua"
+importar { ErroAvaliadorSintatico } de "./avaliador-sintatico/erro-avaliador-sintatico.delegua"
+importar { RetornoAvaliadorSintatico } de "./avaliador-sintatico/retorno-avaliador-sintatico.delegua"
+importar { AvaliadorSintatico } de "./avaliador-sintatico/avaliador-sintatico.delegua"
+importar { Interpretador } de "./interpretador/interpretador.delegua"
+
+// Executa um trecho de código Delégua: lexador → avaliador sintático → interpretador.
+funcao interpretar_codigo(codigo_fonte: texto) {
+    var lexador: Lexador = Lexador()
+    var retornoLexador: RetornoLexador = lexador.mapear(codigo_fonte, 0)
+    var avaliadorSintatico: AvaliadorSintatico = AvaliadorSintatico()
+    var retornoAvaliadorSintatico: RetornoAvaliadorSintatico = avaliadorSintatico.analisar(retornoLexador.simbolos)
+    var interpretador: Interpretador = Interpretador()
+    retorna interpretador.interpretar(retornoAvaliadorSintatico.declaracoes)
+}

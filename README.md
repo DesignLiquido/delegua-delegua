@@ -28,15 +28,31 @@ compilacao.emitirDebug=verdadeiro
 
 Comando exato do compilador ainda não documentado neste repositório.
 
-## Documentação
+## Pacote Pacoteca
 
-- Estratégia geral: `docs/roteiro-auto-hospedagem.md`
-- Arquitetura alvo: `docs/arquitetura-autointerpretador.md`
-- Pendências de execução: `docs/pendencias-mvp.md`
+Este repositório também é o pacote `delegua` da Pacoteca, descrito em `pacoteca.jsonc`. O ponto de entrada do pacote é `fontes/delegua.delegua`, que não tem efeitos colaterais; o executável `deldel` continua sendo gerado a partir de `fontes/execucao.delegua`.
 
-## Primeiras entregas esperadas
+API pública:
 
-1. Definir gramática e AST mínima para um subconjunto executável.
-2. Criar suíte de conformidade em Delégua.
-3. Implementar motor de execução e interpretador de AST no próprio Delégua.
-4. Executar auto-hospedagem em múltiplos estágios.
+- `interpretar_codigo(codigo_fonte)`: executa um trecho de código Delégua.
+- Classes `Lexador`, `AvaliadorSintatico` e `Interpretador`, para usar cada etapa separadamente.
+
+Exemplo:
+
+```delegua
+importar { interpretar_codigo } de "delegua"
+
+interpretar_codigo("var x = 10; escreva(x * 3);")
+```
+
+Uso das etapas separadamente:
+
+```delegua
+importar { Lexador, AvaliadorSintatico, Interpretador } de "delegua"
+
+var lexador: Lexador = Lexador()
+var retornoLexador = lexador.mapear("escreva(\"olá\");", 0)
+var avaliadorSintatico: AvaliadorSintatico = AvaliadorSintatico()
+var interpretador: Interpretador = Interpretador()
+interpretador.interpretar(avaliadorSintatico.analisar(retornoLexador.simbolos).declaracoes)
+```
