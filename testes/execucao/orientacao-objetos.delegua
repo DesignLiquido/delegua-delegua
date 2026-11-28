@@ -1,0 +1,52 @@
+// interface/implementa, eInstanciaDe, mescla, sobrecarga de operadores, extensão e asserção.
+interface Imprimivel {
+    titulo: texto
+    imprimir(): vazio
+}
+classe Relatorio implementa Imprimivel {
+    titulo: texto
+    construtor(t) { isto.titulo = t }
+    imprimir() { escreva("Relatório: " + isto.titulo) }
+}
+var r = Relatorio("Vendas")
+r.imprimir()
+escreva(r.eInstanciaDe(Relatorio))
+classe Registravel {
+    registrar(msg) { escreva("[LOG] " + msg) }
+    log() { escreva("mixin") }
+}
+classe Servico mescla Registravel {
+    executar() { isto.registrar("executando") }
+    log() { escreva("classe") }
+}
+var s = Servico()
+s.executar()
+s.log()
+escreva(s.eInstanciaDe(Registravel), s.eInstanciaDe(Servico))
+classe Vetor2 {
+    x: número
+    y: número
+    construtor(x, y) { isto.x = x
+        isto.y = y }
+    operador +(outro) { retorna Vetor2(isto.x + outro.x, isto.y + outro.y) }
+    operador ==(outro) { retorna isto.x == outro.x e isto.y == outro.y }
+    operador *(k) { retorna Vetor2(isto.x * k, isto.y * k) }
+}
+var a = Vetor2(1, 2) + Vetor2(3, 4)
+escreva(a.x, a.y, Vetor2(1, 1) == Vetor2(1, 1), Vetor2(1, 1) == Vetor2(1, 2), (a * 2).x)
+extensão de texto {
+    gritar() { retorna isto.maiusculo() + "!!!" }
+}
+extensao de número {
+    dobro() { retorna isto * 2 }
+}
+extensao de vetor {
+    primeiro() { retorna isto[0] }
+}
+escreva("olá".gritar(), (21).dobro(), [7, 8].primeiro())
+var idade = 20
+asserção idade >= 18
+asserção(idade >= 18, "precisa ser adulto")
+escreva("passou")
+tente { asserção(idade < 18, "precisa ser menor") } pegue (erro) { escreva(erro.mensagem) }
+tente { assercao idade > 100 } pegue (erro) { escreva(erro.mensagem) }

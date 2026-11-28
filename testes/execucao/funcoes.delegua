@@ -1,0 +1,17 @@
+// Funções, recursão e retorno antecipado (Estágio-0).
+funcao fatorial(n) {
+    se n <= 1 { retorna 1 }
+    retorna n * fatorial(n - 1)
+}
+funcao maiorDeDois(a, b) {
+    se a > b { retorna a } senao { retorna b }
+}
+funcao primeiroPar(lista) {
+    var i = 0
+    enquanto i < lista.tamanho() {
+        se lista[i] % 2 == 0 { retorna lista[i] }
+        i += 1
+    }
+    retorna nulo
+}
+escreva(fatorial(10), maiorDeDois(3, 7), primeiroPar([1, 3, 8, 10]), primeiroPar([1]))

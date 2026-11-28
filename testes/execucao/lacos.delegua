@@ -1,0 +1,50 @@
+// Laços: para cada (vetor, texto, dicionário, {chave, valor}), para com e sem parênteses,
+// continua, sustar, ++ e --, e retorna de dentro de laços.
+para cada x em [1, 2, 3] { escreva(x) }
+para cada c em "ação" { escreva(c) }
+para cada {chave, valor} em {"a": 1, "b": [2]} { escreva(chave, valor) }
+
+var chaves = ""
+para cada chave em {"x": 1, "y": 2}.chaves() { chaves = chaves + chave }
+escreva(chaves)
+
+para (var i = 0; i < 5; i = i + 1) {
+    se i == 1 { continua }
+    se i == 3 { sustar }
+    escreva("i", i)
+}
+
+para var j = 0; j < 2; j++ { escreva("j", j) }
+
+var k = 10
+var antes = k--
+escreva(antes, k, ++k, k)
+
+var soma = 0
+enquanto verdadeiro {
+    soma += 1
+    se soma < 3 { continua }
+    sustar
+}
+escreva(soma)
+
+funcao primeiroMaiorQue(lista, limite) {
+    para cada n em lista {
+        se n > limite { retorna n }
+    }
+    retorna -1
+}
+escreva(primeiroMaiorQue([1, 5, 9], 4), primeiroMaiorQue([1], 4))
+
+var lista = [1, 2]
+para cada item em lista {
+    se lista.tamanho() < 4 { lista.adicionar(item * 10) }
+}
+escreva(lista)
+
+var vetores = [[1, 2], [3]]
+var total = 0
+para cada interno em vetores {
+    para cada valorInterno em interno { total += valorInterno }
+}
+escreva(total)

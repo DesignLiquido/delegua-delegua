@@ -1,0 +1,3 @@
+importar tudo como b de "./ciclo-b.delegua"
+funcao nomeA() { retorna "a" }
+funcao nomeB() { retorna b.nomeB() }

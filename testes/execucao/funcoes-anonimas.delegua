@@ -1,0 +1,74 @@
+// Funções anônimas: captura de variáveis (fechamentos), funções em vetores e dicionários,
+// parâmetros variádicos e o padrão de rotas/middlewares do Líquido.
+funcao criarContador() {
+    var contagem = 0
+    retorna funcao() {
+        contagem += 1
+        retorna contagem
+    }
+}
+var a = criarContador()
+var b = criarContador()
+escreva(a(), a(), a(), b())
+
+var dobrar = funcao(x) { retorna x * 2 }
+var operacoes = [dobrar, funcao(x) { retorna x + 100 }]
+var tabela = {"quadrado": funcao(x) { retorna x * x }}
+escreva(operacoes[0](5), operacoes[1](5), tabela["quadrado"](5), tipo de dobrar)
+
+funcao aplicarTodas(valor, ...funcoes) {
+    var resultado = valor
+    para cada f em funcoes {
+        resultado = f(resultado)
+    }
+    retorna resultado
+}
+escreva(aplicarTodas(3, dobrar, dobrar, funcao(x) { retorna x - 1 }), aplicarTodas(7))
+
+funcao juntarTudo(separador, ...partes) {
+    retorna partes.juntar(separador)
+}
+escreva(juntarTudo("-", "a", "b", "c"), juntarTudo("-").tamanho())
+
+// Como no Líquido: o registrador guarda as funções de rota e um método devolve um
+// middleware que enxerga `isto` e os parâmetros.
+classe Registrador {
+    rotas: vetor
+    prefixo: texto
+
+    construtor(prefixo) {
+        isto.rotas = []
+        isto.prefixo = prefixo
+    }
+
+    rotaGet(...funcoes) {
+        para cada f em funcoes { isto.rotas.adicionar(f) }
+        retorna funcoes.tamanho()
+    }
+
+    exigir(valorEsperado) {
+        var registrador = isto
+        retorna funcao(requisicao, resposta) {
+            se requisicao["usuario"] != valorEsperado {
+                resposta["status"] = 401
+                retorna falso
+            }
+            resposta["origem"] = registrador.prefixo
+            retorna verdadeiro
+        }
+    }
+}
+var liquido = Registrador("/api")
+escreva(liquido.rotaGet(liquido.exigir("ana"), funcao(requisicao, resposta) {
+    resposta["corpo"] = "Olá, " + requisicao["usuario"]
+    retorna verdadeiro
+}))
+funcao atender(usuario) {
+    var requisicao = {"usuario": usuario}
+    var resposta = {"status": 200}
+    para cada rota em liquido.rotas {
+        se nao rota(requisicao, resposta) { sustar }
+    }
+    retorna resposta
+}
+escreva(atender("ana"), atender("beto"))

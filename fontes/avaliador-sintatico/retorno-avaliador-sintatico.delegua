@@ -1,12 +1,16 @@
 importar { Declaracao } de "../declaracoes/declaracao.delegua"
+importar { ErroAvaliadorSintatico } de "./erro-avaliador-sintatico.delegua"
 
 classe RetornoAvaliadorSintatico {
     declaracoes: Declaracao[]
     erros: texto[]
+    // Os mesmos erros, com o símbolo onde ocorreram (linha), para mensagens formatadas.
+    errosDetalhados: ErroAvaliadorSintatico[]
 
     construtor() {
         isto.declaracoes = []
         isto.erros = []
+        isto.errosDetalhados = []
     }
 
     paraTexto(): texto {

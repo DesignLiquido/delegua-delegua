@@ -1,0 +1,546 @@
+// Módulos nativos do deldel: `arquivos`, `processo`, `argumentos`, `tempo`, `rede` e
+// `criptografia` (este liga o OpenSSL: no Windows, compile com o clang do MSYS2 UCRT64), com a
+// mesma interface do delegua-node (que o Líquido e os demais pacotes usam). Cada função
+// recebe e devolve valores dinâmicos do interpretador ({tipo, valor}) e chama a função
+// equivalente do hospedeiro (o deldel é compilado pelo delegua-llvm).
+//
+// Diferenças em relação ao hospedeiro, para seguir o delegua-node:
+// - `arquivos.lerTexto` e `processo.variavelAmbiente` devolvem nulo quando não há valor;
+// - `argumentos` traz os argumentos do programa (depois do arquivo .delegua; um `--` inicial
+//   é ignorado), com `temArgumento`/`obterArgumento` para `--nome valor`, `--nome=valor` e `-x valor`;
+// - soquetes de `rede` ficam numa tabela do hospedeiro; o valor do interpretador guarda só o
+//   identificador (tipo "soquete").
+importar { ValorVetor, ValorDicionario, ContadorIdentificadores } de "./valores.delegua"
+importar tudo como arquivos de "arquivos"
+importar tudo como processo de "processo"
+importar tudo como argumentosHospedeiro de "argumentos"
+importar tudo como tempo de "tempo"
+importar tudo como rede de "rede"
+importar tudo como criptografia de "criptografia"
+
+classe ModulosNativos {
+    contador: ContadorIdentificadores
+    soquetes: dicionário
+    proximoSoquete: inteiro
+    argumentosPrograma: texto[]
+    nomeados: dicionário
+
+    construtor(contador: ContadorIdentificadores) {
+        isto.contador = contador
+        isto.soquetes = {}
+        isto.proximoSoquete = 1
+        isto.argumentosPrograma = []
+        isto.nomeados = {}
+        isto.lerArgumentosPrograma()
+    }
+
+    // ── Valores ──
+
+    criarValor(tipoValor: texto, valor: qualquer): dicionário {
+        var v: dicionário = {}
+        v["tipo"] = tipoValor
+        v["valor"] = valor
+        retorna v
+    }
+
+    criarNulo(): dicionário {
+        retorna isto.criarValor("nulo", nulo)
+    }
+
+    criarLogico(valor: lógico): dicionário {
+        retorna isto.criarValor("logico", valor)
+    }
+
+    criarTexto(valor: texto): dicionário {
+        retorna isto.criarValor("texto", valor)
+    }
+
+    criarNumero(valor: número): dicionário {
+        retorna isto.criarValor("numero", valor)
+    }
+
+    // Texto do hospedeiro que pode ser nulo (ponteiro nulo) → nulo do interpretador.
+    criarTextoOuNulo(valor: texto): dicionário {
+        se valor == nulo { retorna isto.criarNulo() }
+        retorna isto.criarTexto(valor)
+    }
+
+    criarVetorDeTextos(partes: texto[]): dicionário {
+        var itens: dicionário[] = []
+        var i: inteiro = 0
+        enquanto i < partes.tamanho() {
+            var parte: texto = partes[i]
+            itens.adicionar(isto.criarTexto(parte))
+            i = i + 1
+        }
+        var conteudo: ValorVetor = ValorVetor(itens, isto.contador.novo())
+        retorna isto.criarValor("vetor", conteudo)
+    }
+
+    tipoDe(v: dicionário): texto {
+        se v == nulo { retorna "nulo" }
+        var t: texto = v["tipo"]
+        retorna t
+    }
+
+    // ── Argumentos ──
+
+    argumentoQualquer(args: qualquer[], posicao: inteiro): dicionário {
+        se posicao >= args.tamanho() { retorna isto.criarNulo() }
+        var v: dicionário = args[posicao]
+        retorna v
+    }
+
+    exigir(modulo: texto, nomeFuncao: texto, args: qualquer[], quantidade: inteiro) {
+        se args.tamanho() < quantidade {
+            falhar(modulo + "." + nomeFuncao + " espera " + texto(quantidade) + " argumento(s).")
+        }
+    }
+
+    argumentoTexto(modulo: texto, nomeFuncao: texto, args: qualquer[], posicao: inteiro): texto {
+        var v: dicionário = isto.argumentoQualquer(args, posicao)
+        se isto.tipoDe(v) != "texto" {
+            falhar(modulo + "." + nomeFuncao + ": argumento " + texto(posicao + 1) + " deve ser texto.")
+        }
+        var t: texto = v["valor"]
+        retorna t
+    }
+
+    argumentoInteiro(modulo: texto, nomeFuncao: texto, args: qualquer[], posicao: inteiro): inteiro {
+        var v: dicionário = isto.argumentoQualquer(args, posicao)
+        se isto.tipoDe(v) != "numero" {
+            falhar(modulo + "." + nomeFuncao + ": argumento " + texto(posicao + 1) + " deve ser número.")
+        }
+        var n: número = v["valor"]
+        var i: inteiro = n
+        retorna i
+    }
+
+    // Vetor de textos do interpretador → texto[] do hospedeiro.
+    argumentoVetorDeTextos(modulo: texto, nomeFuncao: texto, args: qualquer[], posicao: inteiro): texto[] {
+        var v: dicionário = isto.argumentoQualquer(args, posicao)
+        var resultado: texto[] = []
+        se isto.tipoDe(v) == "nulo" { retorna resultado }
+        se isto.tipoDe(v) != "vetor" {
+            falhar(modulo + "." + nomeFuncao + ": argumento " + texto(posicao + 1) + " deve ser um vetor de textos.")
+        }
+        var conteudo: ValorVetor = v["valor"]
+        var i: inteiro = 0
+        enquanto i < conteudo.tamanho() {
+            var elemento: dicionário = conteudo.obter(i)
+            se isto.tipoDe(elemento) != "texto" {
+                falhar(modulo + "." + nomeFuncao + ": o vetor deve conter só textos.")
+            }
+            var t: texto = elemento["valor"]
+            resultado.adicionar(t)
+            i = i + 1
+        }
+        retorna resultado
+    }
+
+    // ── Tabela de soquetes ──
+
+    guardarSoquete(soquete: qualquer): dicionário {
+        var identificador: inteiro = isto.proximoSoquete
+        isto.proximoSoquete = identificador + 1
+        isto.soquetes[texto(identificador)] = soquete
+        var identificadorNumero: número = identificador
+        retorna isto.criarValor("soquete", identificadorNumero)
+    }
+
+    soqueteDe(nomeFuncao: texto, args: qualquer[], posicao: inteiro): qualquer {
+        var v: dicionário = isto.argumentoQualquer(args, posicao)
+        se isto.tipoDe(v) != "soquete" {
+            falhar("rede." + nomeFuncao + ": argumento " + texto(posicao + 1) + " deve ser um soquete.")
+        }
+        var n: número = v["valor"]
+        var i: inteiro = n
+        var chave: texto = texto(i)
+        se nao isto.soquetes.contem(chave) {
+            falhar("rede." + nomeFuncao + ": soquete já fechado.")
+        }
+        retorna isto.soquetes[chave]
+    }
+
+    // ── Argumentos do programa ──
+
+    lerArgumentosPrograma() {
+        var quantidade: inteiro = argumentosHospedeiro.quantidadeArgumentos()
+        // argumento(0) é o arquivo .delegua executado pelo deldel.
+        var i: inteiro = 1
+        se quantidade > 1 {
+            var primeiro: texto = argumentosHospedeiro.argumento(1)
+            se primeiro == "--" { i = 2 }
+        }
+        enquanto i < quantidade {
+            var argumento: texto = argumentosHospedeiro.argumento(i)
+            isto.argumentosPrograma.adicionar(argumento)
+            i = i + 1
+        }
+
+        var j: inteiro = 0
+        enquanto j < isto.argumentosPrograma.tamanho() {
+            var atual: texto = isto.argumentosPrograma[j]
+            var temProximo: lógico = j + 1 < isto.argumentosPrograma.tamanho()
+            var proximoEhValor: lógico = falso
+            se temProximo {
+                var proximo: texto = isto.argumentosPrograma[j + 1]
+                se proximo.tamanho() == 0 ou proximo[0] != "-" { proximoEhValor = verdadeiro }
+            }
+            se atual.tamanho() > 2 e atual.subtexto(0, 2) == "--" {
+                var semPrefixo: texto = atual.subtexto(2, atual.tamanho())
+                var sinal: inteiro = semPrefixo.encontrar("=", 0)
+                se sinal >= 0 {
+                    isto.nomeados[semPrefixo.subtexto(0, sinal)] = isto.criarTexto(semPrefixo.subtexto(sinal + 1, semPrefixo.tamanho()))
+                } senao se proximoEhValor {
+                    var valorNomeado: texto = isto.argumentosPrograma[j + 1]
+                    isto.nomeados[semPrefixo] = isto.criarTexto(valorNomeado)
+                    j = j + 1
+                } senao {
+                    isto.nomeados[semPrefixo] = isto.criarLogico(verdadeiro)
+                }
+            } senao se atual.tamanho() == 2 e atual[0] == "-" {
+                var chaveCurta: texto = atual.subtexto(1, 2)
+                se proximoEhValor {
+                    var valorCurto: texto = isto.argumentosPrograma[j + 1]
+                    isto.nomeados[chaveCurta] = isto.criarTexto(valorCurto)
+                    j = j + 1
+                } senao {
+                    isto.nomeados[chaveCurta] = isto.criarLogico(verdadeiro)
+                }
+            }
+            j = j + 1
+        }
+    }
+
+    // ── Catálogo ──
+
+    eModulo(nome: texto): lógico {
+        se nome == "arquivos" ou nome == "processo" ou nome == "argumentos" ou nome == "tempo" ou nome == "rede" ou nome == "criptografia" {
+            retorna verdadeiro
+        }
+        retorna falso
+    }
+
+    funcoes(modulo: texto): texto[] {
+        se modulo == "arquivos" {
+            retorna ["existe", "eArquivo", "eDiretorio", "lerTexto", "escreverTexto", "criarDiretorio", "remover", "renomear", "listarDiretorio", "juntarCaminhos", "diretorioPai", "nomeBase", "caminhoAbsoluto", "diretorioAtual", "diretorioPessoal"]
+        }
+        se modulo == "processo" {
+            retorna ["sair", "escreverErro", "variavelAmbiente", "definirVariavelAmbiente", "executar", "executarCapturando", "ultimoCodigoSaida", "sistemaOperacional", "arquitetura"]
+        }
+        se modulo == "argumentos" {
+            retorna ["temArgumento", "obterArgumento", "argumento", "quantidadeArgumentos"]
+        }
+        se modulo == "tempo" {
+            retorna ["carimboDeTempoUnix", "carimboDeTempoUnixMilissegundos", "monotonicoMilissegundos", "dormir"]
+        }
+        se modulo == "rede" {
+            retorna ["escutar", "portaLocal", "aceitar", "conectar", "ler", "lerAte", "escrever", "escreverArquivo", "fechar", "ultimoErro", "codificarComponenteUrl", "decodificarComponenteUrl"]
+        }
+        se modulo == "criptografia" {
+            retorna ["codificarBase64", "decodificarBase64", "md5", "sha1", "sha256", "sha512", "hmacSha256", "hmacSha512", "gerarUuid", "gerarTextoAleatorio"]
+        }
+        var nenhuma: texto[] = []
+        retorna nenhuma
+    }
+
+    // Valores (não funções) expostos pelo módulo: nomes e valores na mesma ordem.
+    nomesConstantes(modulo: texto): texto[] {
+        se modulo == "argumentos" { retorna ["argumentos", "quantidade", "argumentosNomeados"] }
+        var nenhum: texto[] = []
+        retorna nenhum
+    }
+
+    valorConstante(modulo: texto, nome: texto): dicionário {
+        se modulo == "argumentos" e nome == "argumentos" { retorna isto.criarVetorDeTextos(isto.argumentosPrograma) }
+        se modulo == "argumentos" e nome == "quantidade" {
+            var quantidade: número = isto.argumentosPrograma.tamanho()
+            retorna isto.criarNumero(quantidade)
+        }
+        se modulo == "argumentos" e nome == "argumentosNomeados" {
+            var conteudo: ValorDicionario = ValorDicionario(isto.contador.novo())
+            var chaves: texto[] = isto.nomeados.chaves()
+            var i: inteiro = 0
+            enquanto i < chaves.tamanho() {
+                var chave: texto = chaves[i]
+                var valorNomeado: dicionário = isto.nomeados[chave]
+                conteudo.definir(chave, valorNomeado)
+                i = i + 1
+            }
+            retorna isto.criarValor("dicionario", conteudo)
+        }
+        retorna isto.criarNulo()
+    }
+
+    // Número em [0, 1), de 12 dígitos hexadecimais de um UUID v4 (OpenSSL RAND_bytes).
+    numeroAleatorio(): número {
+        var uuid: texto = criptografia.gerarUuid()
+        var digitos: texto = uuid.subtexto(0, 8) + uuid.subtexto(9, 13)
+        var hexadecimais: texto = "0123456789abcdef"
+        var valor: número = 0
+        var i: inteiro = 0
+        enquanto i < digitos.tamanho() {
+            valor = valor * 16 + hexadecimais.encontrar(digitos[i], 0)
+            i = i + 1
+        }
+        // 16^12, calculado: o literal vira `f0x...` no IR do LLVM 23, que o clang 22 não lê.
+        var divisor: número = 1
+        var j: inteiro = 0
+        enquanto j < 12 {
+            divisor = divisor * 16
+            j = j + 1
+        }
+        retorna valor / divisor
+    }
+
+    // ── Chamadas ──
+
+    chamar(modulo: texto, nomeFuncao: texto, args: qualquer[]): dicionário {
+        se modulo == "arquivos" { retorna isto.chamarArquivos(nomeFuncao, args) }
+        se modulo == "processo" { retorna isto.chamarProcesso(nomeFuncao, args) }
+        se modulo == "argumentos" { retorna isto.chamarArgumentos(nomeFuncao, args) }
+        se modulo == "tempo" { retorna isto.chamarTempo(nomeFuncao, args) }
+        se modulo == "rede" { retorna isto.chamarRede(nomeFuncao, args) }
+        se modulo == "criptografia" { retorna isto.chamarCriptografia(nomeFuncao, args) }
+        falhar("Módulo nativo desconhecido: " + modulo + ".")
+        retorna nulo
+    }
+
+    chamarArquivos(nomeFuncao: texto, args: qualquer[]): dicionário {
+        var m: texto = "arquivos"
+        se nomeFuncao == "diretorioAtual" { retorna isto.criarTexto(arquivos.diretorioAtual()) }
+        se nomeFuncao == "diretorioPessoal" { retorna isto.criarTexto(arquivos.diretorioPessoal()) }
+        se nomeFuncao == "juntarCaminhos" {
+            isto.exigir(m, nomeFuncao, args, 1)
+            var caminho: texto = isto.argumentoTexto(m, nomeFuncao, args, 0)
+            var i: inteiro = 1
+            enquanto i < args.tamanho() {
+                caminho = arquivos.juntarCaminhos(caminho, isto.argumentoTexto(m, nomeFuncao, args, i))
+                i = i + 1
+            }
+            retorna isto.criarTexto(caminho)
+        }
+        isto.exigir(m, nomeFuncao, args, 1)
+        var alvo: texto = isto.argumentoTexto(m, nomeFuncao, args, 0)
+        se nomeFuncao == "existe" { retorna isto.criarLogico(arquivos.existe(alvo)) }
+        se nomeFuncao == "eArquivo" {
+            var ehArquivo: lógico = arquivos.eArquivo(alvo) != 0
+            retorna isto.criarLogico(ehArquivo)
+        }
+        se nomeFuncao == "eDiretorio" {
+            var ehDiretorio: lógico = arquivos.eDiretorio(alvo) != 0
+            retorna isto.criarLogico(ehDiretorio)
+        }
+        se nomeFuncao == "lerTexto" {
+            se arquivos.eArquivo(alvo) == 0 { retorna isto.criarNulo() }
+            var conteudo: texto = arquivos.lerTexto(alvo)
+            retorna isto.criarTextoOuNulo(conteudo)
+        }
+        se nomeFuncao == "escreverTexto" {
+            isto.exigir(m, nomeFuncao, args, 2)
+            retorna isto.criarLogico(arquivos.escreverTexto(alvo, isto.argumentoTexto(m, nomeFuncao, args, 1)))
+        }
+        se nomeFuncao == "criarDiretorio" { retorna isto.criarLogico(arquivos.criarDiretorio(alvo)) }
+        se nomeFuncao == "remover" { retorna isto.criarLogico(arquivos.remover(alvo)) }
+        se nomeFuncao == "renomear" {
+            isto.exigir(m, nomeFuncao, args, 2)
+            retorna isto.criarLogico(arquivos.renomear(alvo, isto.argumentoTexto(m, nomeFuncao, args, 1)))
+        }
+        se nomeFuncao == "listarDiretorio" {
+            se arquivos.eDiretorio(alvo) == 0 { retorna isto.criarNulo() }
+            var itens: texto[] = arquivos.listarDiretorio(alvo)
+            retorna isto.criarVetorDeTextos(itens)
+        }
+        se nomeFuncao == "diretorioPai" { retorna isto.criarTexto(arquivos.diretorioPai(alvo)) }
+        se nomeFuncao == "nomeBase" { retorna isto.criarTexto(arquivos.nomeBase(alvo)) }
+        se nomeFuncao == "caminhoAbsoluto" { retorna isto.criarTexto(arquivos.caminhoAbsoluto(alvo)) }
+        falhar("Função 'arquivos." + nomeFuncao + "' não suportada pelo deldel.")
+        retorna nulo
+    }
+
+    chamarProcesso(nomeFuncao: texto, args: qualquer[]): dicionário {
+        var m: texto = "processo"
+        se nomeFuncao == "sistemaOperacional" { retorna isto.criarTexto(processo.sistemaOperacional()) }
+        se nomeFuncao == "arquitetura" { retorna isto.criarTexto(processo.arquitetura()) }
+        se nomeFuncao == "ultimoCodigoSaida" {
+            var ultimo: número = processo.ultimoCodigoSaida()
+            retorna isto.criarNumero(ultimo)
+        }
+        se nomeFuncao == "sair" {
+            var codigoSaida: inteiro = 0
+            se args.tamanho() > 0 { codigoSaida = isto.argumentoInteiro(m, nomeFuncao, args, 0) }
+            processo.sair(codigoSaida)
+            retorna isto.criarNulo()
+        }
+        isto.exigir(m, nomeFuncao, args, 1)
+        var primeiro: texto = isto.argumentoTexto(m, nomeFuncao, args, 0)
+        se nomeFuncao == "escreverErro" {
+            processo.escreverErro(primeiro)
+            retorna isto.criarNulo()
+        }
+        se nomeFuncao == "variavelAmbiente" {
+            var valorAmbiente: texto = processo.variavelAmbiente(primeiro)
+            se valorAmbiente == nulo ou valorAmbiente == "" { retorna isto.criarNulo() }
+            retorna isto.criarTexto(valorAmbiente)
+        }
+        se nomeFuncao == "definirVariavelAmbiente" {
+            isto.exigir(m, nomeFuncao, args, 2)
+            retorna isto.criarLogico(processo.definirVariavelAmbiente(primeiro, isto.argumentoTexto(m, nomeFuncao, args, 1)))
+        }
+        se nomeFuncao == "executar" ou nomeFuncao == "executarCapturando" {
+            var argumentosComando: texto[] = isto.argumentoVetorDeTextos(m, nomeFuncao, args, 1)
+            var diretorio: texto = "."
+            se args.tamanho() > 2 { diretorio = isto.argumentoTexto(m, nomeFuncao, args, 2) }
+            se nomeFuncao == "executar" {
+                var codigo: número = processo.executar(primeiro, argumentosComando, diretorio)
+                retorna isto.criarNumero(codigo)
+            }
+            var saida: texto = processo.executarCapturando(primeiro, argumentosComando, diretorio)
+            retorna isto.criarTextoOuNulo(saida)
+        }
+        falhar("Função 'processo." + nomeFuncao + "' não suportada pelo deldel.")
+        retorna nulo
+    }
+
+    chamarArgumentos(nomeFuncao: texto, args: qualquer[]): dicionário {
+        var m: texto = "argumentos"
+        se nomeFuncao == "quantidadeArgumentos" {
+            var quantidade: número = isto.argumentosPrograma.tamanho()
+            retorna isto.criarNumero(quantidade)
+        }
+        se nomeFuncao == "argumento" {
+            var posicao: inteiro = isto.argumentoInteiro(m, nomeFuncao, args, 0)
+            se posicao < 0 ou posicao >= isto.argumentosPrograma.tamanho() { retorna isto.criarTexto("") }
+            var argumento: texto = isto.argumentosPrograma[posicao]
+            retorna isto.criarTexto(argumento)
+        }
+        isto.exigir(m, nomeFuncao, args, 1)
+        var nome: texto = isto.argumentoTexto(m, nomeFuncao, args, 0)
+        se nomeFuncao == "temArgumento" { retorna isto.criarLogico(isto.nomeados.contem(nome)) }
+        se nomeFuncao == "obterArgumento" {
+            se isto.nomeados.contem(nome) {
+                var valorNomeado: dicionário = isto.nomeados[nome]
+                retorna valorNomeado
+            }
+            retorna isto.argumentoQualquer(args, 1)
+        }
+        falhar("Função 'argumentos." + nomeFuncao + "' não suportada pelo deldel.")
+        retorna nulo
+    }
+
+    chamarTempo(nomeFuncao: texto, args: qualquer[]): dicionário {
+        se nomeFuncao == "carimboDeTempoUnix" {
+            var segundos: longo = tempo.carimboDeTempoUnix()
+            var segundosNumero: número = segundos
+            retorna isto.criarNumero(segundosNumero)
+        }
+        se nomeFuncao == "carimboDeTempoUnixMilissegundos" {
+            var milissegundos: longo = tempo.carimboDeTempoUnixMilissegundos()
+            var milissegundosNumero: número = milissegundos
+            retorna isto.criarNumero(milissegundosNumero)
+        }
+        se nomeFuncao == "monotonicoMilissegundos" {
+            var monotonico: longo = tempo.monotonicoMilissegundos()
+            var monotonicoNumero: número = monotonico
+            retorna isto.criarNumero(monotonicoNumero)
+        }
+        se nomeFuncao == "dormir" {
+            tempo.dormir(isto.argumentoInteiro("tempo", nomeFuncao, args, 0))
+            retorna isto.criarNulo()
+        }
+        falhar("Função 'tempo." + nomeFuncao + "' não suportada pelo deldel.")
+        retorna nulo
+    }
+
+    chamarCriptografia(nomeFuncao: texto, args: qualquer[]): dicionário {
+        var m: texto = "criptografia"
+        se nomeFuncao == "gerarUuid" { retorna isto.criarTexto(criptografia.gerarUuid()) }
+        // Como no delegua-node: hexadecimal de n bytes aleatórios (2n caracteres). O
+        // delegua-llvm devolve n caracteres alfanuméricos; aqui o texto vem de SHA-256 de
+        // UUIDs v4, que o OpenSSL gera com RAND_bytes.
+        se nomeFuncao == "gerarTextoAleatorio" {
+            var quantidadeBytes: inteiro = isto.argumentoInteiro(m, nomeFuncao, args, 0)
+            var hexadecimal: texto = ""
+            enquanto hexadecimal.tamanho() < quantidadeBytes * 2 {
+                hexadecimal = hexadecimal + criptografia.sha256(criptografia.gerarUuid())
+            }
+            retorna isto.criarTexto(hexadecimal.subtexto(0, quantidadeBytes * 2))
+        }
+        var dados: texto = isto.argumentoTexto(m, nomeFuncao, args, 0)
+        se nomeFuncao == "codificarBase64" { retorna isto.criarTexto(criptografia.codificarBase64(dados)) }
+        se nomeFuncao == "decodificarBase64" { retorna isto.criarTextoOuNulo(criptografia.decodificarBase64(dados)) }
+        se nomeFuncao == "md5" { retorna isto.criarTexto(criptografia.md5(dados)) }
+        se nomeFuncao == "sha1" { retorna isto.criarTexto(criptografia.sha1(dados)) }
+        se nomeFuncao == "sha256" { retorna isto.criarTexto(criptografia.sha256(dados)) }
+        se nomeFuncao == "sha512" { retorna isto.criarTexto(criptografia.sha512(dados)) }
+        se nomeFuncao == "hmacSha256" {
+            retorna isto.criarTexto(criptografia.hmacSha256(dados, isto.argumentoTexto(m, nomeFuncao, args, 1)))
+        }
+        se nomeFuncao == "hmacSha512" {
+            retorna isto.criarTexto(criptografia.hmacSha512(dados, isto.argumentoTexto(m, nomeFuncao, args, 1)))
+        }
+        falhar("Função 'criptografia." + nomeFuncao + "' não suportada pelo deldel.")
+        retorna nulo
+    }
+
+    chamarRede(nomeFuncao: texto, args: qualquer[]): dicionário {
+        var m: texto = "rede"
+        se nomeFuncao == "ultimoErro" { retorna isto.criarTexto(rede.ultimoErro()) }
+        se nomeFuncao == "codificarComponenteUrl" {
+            retorna isto.criarTexto(rede.codificarComponenteUrl(isto.argumentoTexto(m, nomeFuncao, args, 0)))
+        }
+        se nomeFuncao == "decodificarComponenteUrl" {
+            var decodificado: texto = rede.decodificarComponenteUrl(isto.argumentoTexto(m, nomeFuncao, args, 0))
+            retorna isto.criarTextoOuNulo(decodificado)
+        }
+        se nomeFuncao == "escutar" {
+            var servidor = rede.escutar(isto.argumentoTexto(m, nomeFuncao, args, 0), isto.argumentoInteiro(m, nomeFuncao, args, 1))
+            se servidor == nulo { retorna isto.criarNulo() }
+            retorna isto.guardarSoquete(servidor)
+        }
+        se nomeFuncao == "conectar" {
+            var cliente = rede.conectar(isto.argumentoTexto(m, nomeFuncao, args, 0), isto.argumentoInteiro(m, nomeFuncao, args, 1), isto.argumentoInteiro(m, nomeFuncao, args, 2))
+            se cliente == nulo { retorna isto.criarNulo() }
+            retorna isto.guardarSoquete(cliente)
+        }
+        se nomeFuncao == "portaLocal" {
+            var porta: número = rede.portaLocal(isto.soqueteDe(nomeFuncao, args, 0))
+            retorna isto.criarNumero(porta)
+        }
+        se nomeFuncao == "aceitar" {
+            var conexao = rede.aceitar(isto.soqueteDe(nomeFuncao, args, 0), isto.argumentoInteiro(m, nomeFuncao, args, 1))
+            se conexao == nulo { retorna isto.criarNulo() }
+            retorna isto.guardarSoquete(conexao)
+        }
+        se nomeFuncao == "ler" {
+            var lido: texto = rede.ler(isto.soqueteDe(nomeFuncao, args, 0), isto.argumentoInteiro(m, nomeFuncao, args, 1), isto.argumentoInteiro(m, nomeFuncao, args, 2))
+            retorna isto.criarTextoOuNulo(lido)
+        }
+        se nomeFuncao == "lerAte" {
+            var lidoAte: texto = rede.lerAte(isto.soqueteDe(nomeFuncao, args, 0), isto.argumentoTexto(m, nomeFuncao, args, 1), isto.argumentoInteiro(m, nomeFuncao, args, 2), isto.argumentoInteiro(m, nomeFuncao, args, 3))
+            retorna isto.criarTextoOuNulo(lidoAte)
+        }
+        se nomeFuncao == "escrever" {
+            retorna isto.criarLogico(rede.escrever(isto.soqueteDe(nomeFuncao, args, 0), isto.argumentoTexto(m, nomeFuncao, args, 1)))
+        }
+        // O delegua-llvm ainda não tem rede.escreverArquivo: o arquivo é lido como texto, o que
+        // não serve para arquivos com bytes nulos (imagens, por exemplo).
+        se nomeFuncao == "escreverArquivo" {
+            var caminhoArquivo: texto = isto.argumentoTexto(m, nomeFuncao, args, 1)
+            se arquivos.eArquivo(caminhoArquivo) == 0 { retorna isto.criarLogico(falso) }
+            var conteudoArquivo: texto = arquivos.lerTexto(caminhoArquivo)
+            retorna isto.criarLogico(rede.escrever(isto.soqueteDe(nomeFuncao, args, 0), conteudoArquivo))
+        }
+        se nomeFuncao == "fechar" {
+            var valorSoquete: dicionário = isto.argumentoQualquer(args, 0)
+            rede.fechar(isto.soqueteDe(nomeFuncao, args, 0))
+            var n: número = valorSoquete["valor"]
+            var i: inteiro = n
+            isto.soquetes.remover(texto(i))
+            retorna isto.criarNulo()
+        }
+        falhar("Função 'rede." + nomeFuncao + "' não suportada pelo deldel.")
+        retorna nulo
+    }
+}

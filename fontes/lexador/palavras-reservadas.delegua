@@ -7,7 +7,22 @@ classe PalavrasReservadas {
         isto.tipos = TiposSimbolos()
     }
 
-    buscar(palavra: texto): texto {
+    // Formas acentuadas das palavras reservadas (`senão`, `não`, `função`, `padrão`,
+    // `contém`...) são as mesmas sem acento.
+    removerAcentos(palavra: texto): texto {
+        var resultado: texto = palavra
+        var comAcento: texto[] = ["á", "à", "â", "ã", "é", "ê", "í", "ó", "ô", "õ", "ú", "ç"]
+        var semAcento: texto[] = ["a", "a", "a", "a", "e", "e", "i", "o", "o", "o", "u", "c"]
+        var i: inteiro = 0
+        enquanto i < comAcento.tamanho() {
+            resultado = resultado.substituir(comAcento[i], semAcento[i])
+            i = i + 1
+        }
+        retorna resultado
+    }
+
+    buscar(palavraOriginal: texto): texto {
+        var palavra: texto = isto.removerAcentos(palavraOriginal)
         escolha palavra {
             caso "abstrata":
                 retorna isto.tipos.ABSTRATO

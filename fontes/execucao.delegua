@@ -1,22 +1,87 @@
+// Executável `deldel`: lê um arquivo Delégua e o executa com o interpretador auto-hospedado.
+//
+//     deldel programa.delegua
+//
+// Erros vão para a saída de erro, no formato `[CODIGO] arquivo:linha mensagem`
+// (ver docs/formato-erros.md), e o programa termina com código 1. Sem argumento, o uso é
+// informado e o código de saída é 2.
 importar { Lexador } de "./lexador/lexador.delegua"
 importar { RetornoLexador } de "./lexador/retorno-lexador.delegua"
+importar { ErroLexador } de "./lexador/erro-lexador.delegua"
 importar { AvaliadorSintatico } de "./avaliador-sintatico/avaliador-sintatico.delegua"
+importar { RetornoAvaliadorSintatico } de "./avaliador-sintatico/retorno-avaliador-sintatico.delegua"
+importar { ErroAvaliadorSintatico } de "./avaliador-sintatico/erro-avaliador-sintatico.delegua"
 importar { Interpretador } de "./interpretador/interpretador.delegua"
 
 var arq = importar("arquivos")
 var arg = importar("argumentos")
+var proc = importar("processo")
+
+funcao informarErro(codigo: texto, arquivo: texto, linha: número, mensagem: texto) {
+    var linhaInteira: inteiro = linha
+    proc.escreverErro("[" + codigo + "] " + arquivo + ":" + texto(linhaInteira) + " " + mensagem)
+}
 
 var caminhoArquivoFonte: texto = arg.argumento(0)
 se caminhoArquivoFonte == "" {
-    caminhoArquivoFonte = "exemplos/ola-mundo.delegua"
+    proc.escreverErro("Uso: deldel <arquivo.delegua> | deldel testar [diretorio] [--interpretador comando]")
+    proc.sair(2)
 }
 
-var arquivoFonte: texto = arq.abrir(caminhoArquivoFonte)
-var codigoFonte: texto = arq.paraTexto(arquivoFonte)
+// `deldel testar ...`: executa o executor de testes do pacote `testes` (fontes/testar.delegua),
+// procurado como em `importar ... de "testes"` a partir do diretório atual. Os argumentos
+// depois de `testar` chegam ao executor pelo módulo `argumentos`.
+se caminhoArquivoFonte == "testar" {
+    var interpretadorBusca: Interpretador = Interpretador()
+    var entradaTestes: texto = interpretadorBusca.resolverPacote("testes")
+    se entradaTestes == "" {
+        proc.escreverErro("[E_ARQUIVO] Pacote 'testes' não encontrado: instale-o em pacotes/llvm/testes ou pacotes/node/testes (repositório testes-delegua).")
+        proc.sair(1)
+    }
+    caminhoArquivoFonte = arq.juntarCaminhos(arq.diretorioPai(entradaTestes), "testar.delegua")
+}
+
+se nao arq.existe(caminhoArquivoFonte) {
+    proc.escreverErro("[E_ARQUIVO] Arquivo não encontrado: " + caminhoArquivoFonte)
+    proc.sair(1)
+}
+
+var codigoFonte: texto = arq.lerTexto(caminhoArquivoFonte)
 
 var lexador: Lexador = Lexador()
 var retornoLexador: RetornoLexador = lexador.mapear(codigoFonte, 0)
-const avaliadorSintatico: AvaliadorSintatico = AvaliadorSintatico()
-const retornoAvaliadorSintatico = avaliadorSintatico.analisar(retornoLexador.simbolos)
+se retornoLexador.erros.tamanho() > 0 {
+    var i: inteiro = 0
+    enquanto i < retornoLexador.erros.tamanho() {
+        var erroLexador: ErroLexador = retornoLexador.erros[i]
+        informarErro("E_LEXADOR", caminhoArquivoFonte, erroLexador.linha, erroLexador.mensagem)
+        i = i + 1
+    }
+    proc.sair(1)
+}
+
+var avaliadorSintatico: AvaliadorSintatico = AvaliadorSintatico()
+var retornoAvaliadorSintatico: RetornoAvaliadorSintatico = avaliadorSintatico.analisar(retornoLexador.simbolos)
+se retornoAvaliadorSintatico.errosDetalhados.tamanho() > 0 {
+    var j: inteiro = 0
+    enquanto j < retornoAvaliadorSintatico.errosDetalhados.tamanho() {
+        var erroSintatico: ErroAvaliadorSintatico = retornoAvaliadorSintatico.errosDetalhados[j]
+        var mensagemSintatica: texto = erroSintatico.mensagem
+        var lexemaErro: texto = erroSintatico.simbolo.lexema
+        se lexemaErro != "" e nao mensagemSintatica.inclui("'" + lexemaErro + "'") {
+            mensagemSintatica = mensagemSintatica + " (em '" + lexemaErro + "')"
+        }
+        informarErro("E_SINTATICO", caminhoArquivoFonte, erroSintatico.simbolo.linha, mensagemSintatica)
+        j = j + 1
+    }
+    proc.sair(1)
+}
+
 var interpretador: Interpretador = Interpretador()
-interpretador.interpretar(retornoAvaliadorSintatico.declaracoes)
+interpretador.definirArquivoPrincipal(caminhoArquivoFonte)
+tente {
+    interpretador.interpretar(retornoAvaliadorSintatico.declaracoes)
+} pegue (erroExecucao) {
+    informarErro("E_EXECUCAO", interpretador.arquivoAtual, interpretador.linhaAtual, erroExecucao.mensagem)
+    proc.sair(1)
+}

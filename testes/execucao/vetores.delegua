@@ -1,0 +1,28 @@
+// Vetores: literais, índice, atribuição por índice, referência compartilhada e primitivas.
+var v = [1, "a", verdadeiro, nulo, [2, 3], {"k": "x"},]
+escreva(v)
+escreva(v.tamanho(), tamanho(v))
+escreva(v[1], v[-1], v[4][0])
+
+var w = v
+w.adicionar(42)
+escreva(v.tamanho(), v[-1])
+
+var numeros = []
+numeros[0] = 10
+numeros.adicionar(20)
+numeros.adicionar(30)
+numeros[1] = 21
+escreva(numeros)
+escreva(numeros.removerUltimo(), numeros.removerPrimeiro(), numeros)
+
+var letras = ["a", "b", "c", "d"]
+escreva(letras.juntar("-"), letras.juntar(), letras.fatiar(1, 3), letras.fatiar(-2))
+escreva(letras.inclui("c"), letras.inclui("z"), letras.contem("a"))
+
+funcao adicionarUm(lista) {
+    lista.adicionar(1)
+    retorna lista.tamanho()
+}
+var vazio = []
+escreva(adicionarUm(vazio), vazio)

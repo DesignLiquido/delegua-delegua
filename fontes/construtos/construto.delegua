@@ -32,8 +32,31 @@ classe Construto {
     alvoAtribuicao: Construto
     valorAtribuicao: Construto
 
+    // Vetor: [a, b]
+    elementos: Construto[]
+
+    // Dicionario: {chave: valor}; chavesDicionario[i] corresponde a valoresDicionario[i]
+    chavesDicionario: Construto[]
+    valoresDicionario: Construto[]
+
+    // AcessoIndice: objetoAcessado[indice]
+    // AcessoMembro: objetoAcessado.nomeMembro (método de primitiva, quando chamado)
+    objetoAcessado: Construto
+    indice: Construto
+    nomeMembro: texto
+
+    // FuncaoAnonima: a declaração (DeclaracaoFuncao sem nome). Fica como `qualquer` porque
+    // Declaracao já importa Construto.
+    funcaoAnonima: qualquer
+
+    // Isto / Super. Em `super.metodo(...)`, nomeMembro é o método; em `super(...)`, "".
+
+    // Linha do símbolo que inicia o construto (para mensagens de erro).
+    linha: número
+
     construtor(noh: texto) {
         isto.noh = noh
+        isto.linha = 0
     }
 
     paraTexto(): texto {

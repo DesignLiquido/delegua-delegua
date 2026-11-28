@@ -1,0 +1,29 @@
+algum verdadeiro todos falso falso
+encontrar 2 2 4 1 nulo
+filtrar [2] mapear [6, 2, 4] primeiro 2
+reduzir 16
+ordenar [1, 2, 3] ['a', 'b'] [3, 2, 1]
+somar 6 max 3 min 1 tam 3 verdadeiro falso
+clonar [1, [2]] [1, [9]]
+intervalo [1, 2, 3] [0, 1, 2]
+paraCada 6
+conv 2 3 3 2 2.5 (1, 2) [1, 2]
+arred 2.57 3 1
+vet [1, 2, 3, 4] [3, 2, 1] [1, 3] 6 (1, 2)
+encaixar [2, 3] [1, 4]
+encaixar2 [2] [1, 9, 8, 3, 4]
+remover [2, 1] [2, 1]
+vetf [2] [2, 4] [1, 2]
+num 3 2 3
+dic {"a":1,"b":2} {"a":1} {"a":1,"c":3} [("a", 1)] 1 nulo
+fmt x=3 3.14 só 100%
+tupla (1, 2, 3) 1
+bits 2 7 5 -6 16 8
+em verdadeiro verdadeiro verdadeiro falso
+ternario s 2 b
+pot -4 512 1verdadeiro anulo nuloa
+fazer 3
+padrao 0 falso x
+verdadeiro falso
+[2, 1, 3] [2, 1, 3]
+[1, 2, 3]

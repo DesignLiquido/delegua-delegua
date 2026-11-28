@@ -1,15 +1,32 @@
 importar { Declaracao } de "../declaracoes/declaracao.delegua"
+importar { EspacoMemoria } de "./espaco-memoria.delegua"
+importar { Construto } de "../construtos/construto.delegua"
 
 // Payload de um valor de tipo "funcao" (ver Interpretador.criarValor). Existe como
 // classe — em vez de guardar `parametros`/`corpo` soltos num `dicionário` — porque
 // acesso a campo de classe preserva o tipo estático (`texto[]`, `Declaracao`), o que
 // leitura por chave de `dicionário` não faz (sempre resolve para `qualquer`).
+// `escopos` são os escopos visíveis onde a função foi declarada (inclusive o escopo do
+// módulo), e `arquivo`/`diretorio`, o arquivo da declaração e seu diretório (base de `importar`): a chamada executa o corpo sobre eles, e
+// não sobre os escopos de quem chama.
 classe ValorFuncao {
     parametros: texto[]
     corpo: Declaracao
+    escopos: EspacoMemoria[]
+    arquivo: texto
+    diretorio: texto
+    // O último parâmetro (`...nome`) recebe os argumentos restantes num vetor.
+    variadica: lógico
+    // Valor padrão de cada parâmetro (Construto "SemPadrao" quando não há).
+    padroes: Construto[]
 
-    construtor(parametros: texto[], corpo: Declaracao) {
+    construtor(parametros: texto[], corpo: Declaracao, escopos: EspacoMemoria[], arquivo: texto, diretorio: texto) {
         isto.parametros = parametros
         isto.corpo = corpo
+        isto.escopos = escopos
+        isto.arquivo = arquivo
+        isto.diretorio = diretorio
+        isto.variadica = falso
+        isto.padroes = []
     }
 }

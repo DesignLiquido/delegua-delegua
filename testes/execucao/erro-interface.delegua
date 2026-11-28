@@ -1,0 +1,7 @@
+interface I {
+    f(): vazio
+}
+classe A implementa I {
+    g() { }
+}
+escreva("depois")

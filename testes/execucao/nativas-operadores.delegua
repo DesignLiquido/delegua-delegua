@@ -1,0 +1,51 @@
+// Funções nativas de coleções, métodos de vetor/número/dicionário, tuplas, operadores
+// (bits, em, ternário, ?:, potência), formatação com % e fazer...enquanto.
+var v = [3, 1, 2]
+var par = funcao(x) { retorna x % 2 == 0 }
+var dobro = funcao(x) { retorna x * 2 }
+escreva("algum", algum(v, par), "todos", todos(v, par), todosEmCondicao(v, par))
+escreva("encontrar", encontrar(v, par), encontrarIndice(v, par), encontrarUltimo([2, 4, 1], par), encontrarUltimoIndice([2, 4, 1], par), encontrar(v, funcao(x) { retorna x > 9 }))
+escreva("filtrar", filtrarPor(v, par), "mapear", mapear(v, dobro), "primeiro", primeiroEmCondicao(v, par))
+escreva("reduzir", reduzir(v, funcao(a, x) { retorna a + x }, 10))
+escreva("ordenar", ordenar([3, 1, 2]), ordenar(["b", "a"]), ordenar([3, 1, 2], funcao(a, b) { retorna b - a }))
+escreva("somar", somar(v), "max", maximo(v), "min", minimo(v), "tam", tamanho(v), incluido(v, 2), incluido(v, 9))
+var w = [1, [2]]
+var c = clonar(w)
+c[1][0] = 9
+escreva("clonar", w, c)
+escreva("intervalo", intervalo(1, 4), intervalo(3))
+var soma = 0
+paraCada(v, funcao(x) { soma += x })
+escreva("paraCada", soma)
+escreva("conv", real(2), longo(3.7), inteiro(3.7), texto(2.0), numero("2.5"), tupla([1, 2]), vetor((1, 2)))
+escreva("arred", arredondar(2.567, 2), arredondar(2.5, 0), aleatorioEntre(1, 1))
+escreva("vet", [1, 2].concatenar([3], [4]), [1, 2, 3].inverter(), [3, 1].ordenar(), [1, 2, 3].somar(), [1, 2].paraTupla())
+var ee = [1, 2, 3, 4]
+escreva("encaixar", ee.encaixar(1, 2), ee)
+var f = [1, 2, 3, 4]
+escreva("encaixar2", f.encaixar(1, 1, 9, 8), f)
+var r = [1, 2, 1]
+escreva("remover", r.remover(1), r)
+escreva("vetf", [1, 2, 3].filtrarPor(par), [1, 2].mapear(dobro), [2, 1].ordenar(funcao(a, b) { retorna a - b }))
+escreva("num", (-3).absoluto(), 2.7.arredondarParaBaixo(), 2.1.arredondarParaCima())
+var n = 1234.5
+var d = {"a": 1}
+escreva("dic", d.mesclar({"b": 2}), d, d.concatenar({"c": 3}), d.itens(), d.obter("a"), d.obter("z"))
+escreva("fmt", "%s=%d" % ["x", 3], "%.2f" % 3.14159, "%s" % "só", "100%%" % [])
+var tu = (1, 2, 3)
+escreva("tupla", tu, tu[0])
+escreva("bits", 6 & 3, 6 | 3, 6 ^ 3, ~5, 1 << 4, 32 >> 2)
+escreva("em", 2 em [1, 2], "b" em "abc", "k" em {"k": 1}, 5 em [1])
+escreva("ternario", verdadeiro ? "s" : "n", falso ? 1 : 2, 1 > 2 ? "a" : 3 > 2 ? "b" : "c")
+escreva("pot", -2 ** 2, 2 ** 3 ** 2, 1 + verdadeiro, "a" + nulo, nulo + "a")
+var i = 0
+fazer { i += 1 } enquanto i < 3
+escreva("fazer", i)
+escreva(nulo ?: "padrao", 0 ?: "zero", falso ?: "f", "x" ?: "y")
+escreva([1, 2] contem 2, "abc" contém "z")
+var l = [3, 1, 2]
+var r = l.inverter()
+escreva(l, r)
+var o = [3, 1, 2]
+o.ordenar()
+escreva(o)

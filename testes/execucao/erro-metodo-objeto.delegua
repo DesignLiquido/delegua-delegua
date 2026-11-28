@@ -1,0 +1,6 @@
+classe A {
+    metodo() {
+        retorna isto.inexistente()
+    }
+}
+A().metodo()

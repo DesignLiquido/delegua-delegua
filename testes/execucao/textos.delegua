@@ -1,0 +1,14 @@
+// Primitivas de texto. Índices e tamanhos contam caracteres, inclusive acentuados.
+var s = "ação é ok"
+escreva(s.tamanho(), s[1], s[-1], s.subtexto(1, 4), s.fatiar(5), s.encontrar("é"), s.encontrar("o", 4))
+escreva(" a b ".aparar() + "|", " a ".apararInicio() + "|", " a ".apararFim() + "|")
+escreva("AbC".minusculo(), "abc".maiusculo(), "ação".maiusculo())
+escreva("abc".inclui("b"), "abc".inclui("z"), "abc".terminaCom("bc"), "abc".terminaCom("a"))
+escreva("aXbX".substituir("X", "-"), "abc".substituir("z", "-"))
+escreva("a-b-c".dividir("-"), "ab".dividir(""), "abc".inverter(), "ção".inverter())
+escreva("abc".concatenar("d", "e"), "abcd".fatiar(1, 3), "abcd".fatiar(-2), "abc".subtexto(1))
+escreva("abcb".encontrar("z"), "abcb".encontrar("b", 2))
+
+// Identificadores e palavras reservadas acentuados.
+var ação = "ok"
+se não falso { escreva(ação) } senão { escreva("não") }

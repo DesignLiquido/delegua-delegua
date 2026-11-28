@@ -1,0 +1,42 @@
+// Módulos nativos: arquivos, processo, argumentos, tempo e rede (interface do delegua-node).
+importar tudo como arquivos de "arquivos"
+importar tudo como processo de "processo"
+importar tudo como argumentos de "argumentos"
+importar tudo como tempo de "tempo"
+importar tudo como rede de "rede"
+
+// arquivos
+var diretorio = arquivos.juntarCaminhos(arquivos.diretorioAtual(), "testes-nativos-temporario")
+se arquivos.existe(diretorio) { arquivos.remover(arquivos.juntarCaminhos(diretorio, "a.txt")) }
+escreva(arquivos.criarDiretorio(diretorio) ou arquivos.eDiretorio(diretorio))
+var caminho = arquivos.juntarCaminhos(diretorio, "a.txt")
+escreva(arquivos.escreverTexto(caminho, "linha 1\nação"))
+escreva(arquivos.lerTexto(caminho), arquivos.eArquivo(caminho), arquivos.eDiretorio(caminho))
+escreva(arquivos.listarDiretorio(diretorio), arquivos.nomeBase(caminho))
+escreva(arquivos.lerTexto(arquivos.juntarCaminhos(diretorio, "nao-existe.txt")))
+escreva(arquivos.remover(caminho), arquivos.existe(caminho))
+arquivos.remover(diretorio)
+escreva(arquivos.existe(diretorio))
+
+// processo
+escreva(processo.variavelAmbiente("DELDEL_VARIAVEL_QUE_NAO_EXISTE"))
+processo.definirVariavelAmbiente("DELDEL_TESTE", "valor")
+escreva(processo.variavelAmbiente("DELDEL_TESTE"))
+
+// argumentos (o executor de testes não passa argumentos)
+escreva(argumentos.quantidade, argumentos.temArgumento("x"), argumentos.obterArgumento("x", "padrão"))
+
+// tempo
+escreva(tempo.carimboDeTempoUnix() > 1700000000, tempo.monotonicoMilissegundos() >= 0)
+
+// rede: servidor e cliente no mesmo processo
+var servidor = rede.escutar("127.0.0.1", 0)
+var porta = rede.portaLocal(servidor)
+var cliente = rede.conectar("127.0.0.1", porta, 2000)
+var conexao = rede.aceitar(servidor, 2000)
+escreva(rede.escrever(cliente, "olá, rede\n"))
+escreva(rede.lerAte(conexao, "\n", 100, 2000))
+rede.fechar(conexao)
+rede.fechar(cliente)
+rede.fechar(servidor)
+escreva(rede.codificarComponenteUrl("a b/ç"), rede.decodificarComponenteUrl("a%20b%2F%C3%A7"))

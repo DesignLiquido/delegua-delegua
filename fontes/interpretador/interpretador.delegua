@@ -1,17 +1,70 @@
 importar { EspacoMemoria } de "./espaco-memoria.delegua"
 importar { PilhaEscoposExecucao } de "./pilha-escopos-execucao.delegua"
 importar { ValorFuncao } de "./valor-funcao.delegua"
+importar { ValorVetor, ValorDicionario, ValorModulo, ContadorIdentificadores, ValorClasse, ValorObjeto } de "./valores.delegua"
+importar { ModulosNativos } de "./modulos-nativos.delegua"
+importar { TextoUtf8 } de "./texto-utf8.delegua"
 importar { Construto } de "../construtos/construto.delegua"
 importar { Declaracao } de "../declaracoes/declaracao.delegua"
+importar { Lexador } de "../lexador/lexador.delegua"
+importar { RetornoLexador } de "../lexador/retorno-lexador.delegua"
+importar { ErroLexador } de "../lexador/erro-lexador.delegua"
+importar { AvaliadorSintatico } de "../avaliador-sintatico/avaliador-sintatico.delegua"
+importar { RetornoAvaliadorSintatico } de "../avaliador-sintatico/retorno-avaliador-sintatico.delegua"
+importar { ErroAvaliadorSintatico } de "../avaliador-sintatico/erro-avaliador-sintatico.delegua"
+importar tudo como arquivos de "arquivos"
 
+// Valores dinâmicos: dicionários {tipo, valor}. "tipo" é um de
+// "numero" | "texto" | "logico" | "nulo" | "vetor" | "dicionario" | "funcao" | "nativa".
+// Para "vetor", "dicionario" e "modulo", "valor" é uma instância de
+// ValorVetor/ValorDicionario/ValorModulo (compartilhada entre variáveis, como as
+// referências de Delégua).
+//
+// Escopos: as nativas ficam em `escopoNativas`, na base de toda pilha. Cada arquivo
+// (principal ou módulo) tem seu escopo de nível superior logo acima. Funções guardam os
+// escopos de onde foram declaradas e, ao serem chamadas, executam sobre eles.
+//
+// Erros de execução usam `falhar`: quem executa o interpretador (execucao.delegua) os
+// captura e informa a linha da última declaração executada (`linhaAtual`).
 classe Interpretador {
     pilha: PilhaEscoposExecucao
+    linhaAtual: número
+    contador: ContadorIdentificadores
+    nativos: ModulosNativos
+    utf8: TextoUtf8
+    escopoNativas: EspacoMemoria
+    // Arquivo em execução (para mensagens) e seu diretório (base de `importar`).
+    arquivoAtual: texto
+    diretorioAtual: texto
+    // Caminho absoluto → valor do módulo já carregado.
+    modulos: dicionário
+    // Classe embutida Excecao { mensagem } (erros capturados por `pegue`).
+    classeExcecao: dicionário
+    // Valor lançado por `falhar`, até ser capturado (ver executarComandoTente).
+    excecaoPendente: dicionário
+    // Métodos de `extensão`: chave do tipo → valor "classe" com os métodos.
+    extensoes: dicionário
 
     construtor() {
+        isto.utf8 = TextoUtf8()
         isto.pilha = PilhaEscoposExecucao()
-        var escopo: EspacoMemoria = EspacoMemoria()
-        isto.pilha.empilhar(escopo)
+        isto.linhaAtual = 0
+        isto.contador = ContadorIdentificadores()
+        isto.nativos = ModulosNativos(isto.contador)
+        isto.arquivoAtual = ""
+        isto.diretorioAtual = arquivos.diretorioAtual()
+        isto.modulos = {}
+        isto.escopoNativas = EspacoMemoria()
+        isto.pilha.empilhar(isto.escopoNativas)
         isto.registrarBuiltins()
+        isto.excecaoPendente = isto.criarNulo()
+        isto.extensoes = {}
+        var camposExcecao: texto[] = ["mensagem"]
+        var conteudoExcecao: ValorClasse = ValorClasse("Excecao", isto.criarNulo(), camposExcecao, isto.novoIdentificador())
+        isto.classeExcecao = isto.criarValor("classe", conteudoExcecao)
+        isto.pilha.definirVariavel("Excecao", isto.classeExcecao)
+        var escopoPrincipal: EspacoMemoria = EspacoMemoria()
+        isto.pilha.empilhar(escopoPrincipal)
     }
 
     // Registra cada nativa como um valor comum (tipo "nativa", valor = seu próprio
@@ -29,10 +82,16 @@ classe Interpretador {
         isto.pilha.definirVariavel("tipo", isto.criarValor("nativa", "tipo"))
         isto.pilha.definirVariavel("inteiro", isto.criarValor("nativa", "inteiro"))
         isto.pilha.definirVariavel("leia", isto.criarValor("nativa", "leia"))
+        isto.pilha.definirVariavel("tamanho", isto.criarValor("nativa", "tamanho"))
+        var nativasExtras: texto[] = ["real", "longo", "arredondar", "aleatorio", "aleatorioEntre", "intervalo", "clonar", "tupla", "vetor", "somar", "maximo", "minimo", "ordenar", "incluido", "reduzir", "mapear", "filtrarPor", "paraCada", "algum", "todos", "todosEmCondicao", "encontrar", "primeiroEmCondicao", "encontrarIndice", "encontrarUltimo", "encontrarUltimoIndice"]
+        var indiceNativa: inteiro = 0
+        enquanto indiceNativa < nativasExtras.tamanho() {
+            var nomeNativa: texto = nativasExtras[indiceNativa]
+            isto.pilha.definirVariavel(nomeNativa, isto.criarValor("nativa", nomeNativa))
+            indiceNativa = indiceNativa + 1
+        }
     }
 
-    // Cria um valor dinâmico com discriminante explícito. "tipo" é um dos
-    // "numero" | "texto" | "logico" | "nulo".
     criarValor(tipoValor: texto, valor: qualquer): dicionário {
         var v: dicionário = {}
         v["tipo"] = tipoValor
@@ -40,40 +99,322 @@ classe Interpretador {
         retorna v
     }
 
+    criarNulo(): dicionário {
+        retorna isto.criarValor("nulo", nulo)
+    }
+
+    novoIdentificador(): inteiro {
+        retorna isto.contador.novo()
+    }
+
+    criarVetor(elementos: dicionário[]): dicionário {
+        var conteudo: ValorVetor = ValorVetor(elementos, isto.novoIdentificador())
+        retorna isto.criarValor("vetor", conteudo)
+    }
+
+    comoVetor(v: dicionário): ValorVetor {
+        var conteudo: ValorVetor = v["valor"]
+        retorna conteudo
+    }
+
+    comoDicionario(v: dicionário): ValorDicionario {
+        var conteudo: ValorDicionario = v["valor"]
+        retorna conteudo
+    }
+
+    comoTexto(v: dicionário): texto {
+        var t: texto = v["valor"]
+        retorna t
+    }
+
+    // Textos só com ASCII usam as primitivas de byte do hospedeiro; os demais passam por
+    // TextoUtf8. O resultado fica guardado no próprio valor (textos são imutáveis).
+    ehAscii(v: dicionário): lógico {
+        se v.contem("ascii") {
+            var marcado: texto = v["ascii"]
+            retorna marcado == "s"
+        }
+        var resultado: lógico = isto.utf8.ehAscii(isto.comoTexto(v))
+        se resultado { v["ascii"] = "s" } senao { v["ascii"] = "n" }
+        retorna resultado
+    }
+
+    // Posição em bytes do início de cada caractere de um texto não ASCII (mais o tamanho em
+    // bytes, no fim), calculada uma vez e guardada no valor: assim texto[i], tamanho() e
+    // subtexto() custam O(1) em vez de percorrer o texto a cada acesso (o que deixava
+    // quadráticos os analisadores que leem caractere por caractere, como os de JSON e CSV).
+    posicoesTexto(v: dicionário): inteiro[] {
+        se v.contem("posicoes") {
+            var guardadas: inteiro[] = v["posicoes"]
+            retorna guardadas
+        }
+        var posicoes: inteiro[] = isto.utf8.posicoesBytes(isto.comoTexto(v))
+        v["posicoes"] = posicoes
+        retorna posicoes
+    }
+
+    tamanhoTexto(v: dicionário): inteiro {
+        var valorTexto: texto = isto.comoTexto(v)
+        se isto.ehAscii(v) { retorna valorTexto.tamanho() }
+        var posicoes: inteiro[] = isto.posicoesTexto(v)
+        retorna posicoes.tamanho() - 1
+    }
+
+    subtextoTexto(v: dicionário, inicio: inteiro, fim: inteiro): texto {
+        var valorTexto: texto = isto.comoTexto(v)
+        se fim <= inicio { retorna "" }
+        se isto.ehAscii(v) { retorna valorTexto.subtexto(inicio, fim) }
+        var posicoes: inteiro[] = isto.posicoesTexto(v)
+        var ultimo: inteiro = posicoes.tamanho() - 1
+        var inicioReal: inteiro = inicio
+        var fimReal: inteiro = fim
+        se inicioReal > ultimo { inicioReal = ultimo }
+        se fimReal > ultimo { fimReal = ultimo }
+        retorna valorTexto.subtexto(posicoes[inicioReal], posicoes[fimReal])
+    }
+
+    // Normaliza um índice (negativo conta do fim; limitado a 0..tamanho).
+    limitarIndice(indice: inteiro, tamanho: inteiro): inteiro {
+        var resultado: inteiro = indice
+        se resultado < 0 { resultado = tamanho + resultado }
+        se resultado < 0 { resultado = 0 }
+        se resultado > tamanho { resultado = tamanho }
+        retorna resultado
+    }
+
+    caracteresTexto(v: dicionário): texto[] {
+        var valorTexto: texto = isto.comoTexto(v)
+        se isto.ehAscii(v) {
+            var resultado: texto[] = []
+            var i: inteiro = 0
+            enquanto i < valorTexto.tamanho() {
+                var caractere: texto = valorTexto[i]
+                resultado.adicionar(caractere)
+                i = i + 1
+            }
+            retorna resultado
+        }
+        retorna isto.utf8.caracteres(valorTexto)
+    }
+
+    tipoDe(v: dicionário): texto {
+        se v == nulo { retorna "nulo" }
+        var t: texto = v["tipo"]
+        retorna t
+    }
+
+    // Nome do tipo como em `tipo de` do núcleo de Delégua.
+    nomeTipo(v: dicionário): texto {
+        var t: texto = isto.tipoDe(v)
+        se t == "numero" { retorna "número" }
+        se t == "logico" { retorna "lógico" }
+        se t == "dicionario" { retorna "dicionário" }
+        se t == "funcao" ou t == "nativa" { retorna "função" }
+        se t == "modulo" { retorna "módulo" }
+        se t == "tupla" { retorna "tupla" }
+        se t == "classe" { retorna "classe" }
+        se t == "interface" { retorna "interface" }
+        se t == "objeto" {
+            se isto.eExcecao(v) { retorna "objeto" }
+            retorna isto.nomeClasseDoObjeto(v)
+        }
+        se t == "soquete" { retorna "soquete" }
+        retorna t
+    }
+
+    // ── Exibição ──
+
+    // Como `escreva` mostra o valor no nível superior.
     paraTextoExibicao(v: dicionário): texto {
-        se v == nulo ou v["tipo"] == "nulo" { retorna "nulo" }
-        se v["tipo"] == "texto" {
-            var t: texto = v["valor"]
-            retorna t
-        }
-        se v["tipo"] == "numero" {
+        var t: texto = isto.tipoDe(v)
+        se t == "nulo" { retorna "nulo" }
+        se t == "texto" { retorna isto.comoTexto(v) }
+        se t == "numero" {
             var n: número = v["valor"]
-            retorna texto(n)
+            retorna isto.formatarNumero(n)
         }
-        se v["tipo"] == "logico" {
+        se t == "logico" {
             var l: lógico = v["valor"]
             se l { retorna "verdadeiro" }
             retorna "falso"
         }
+        se t == "vetor" { retorna isto.exibirVetor(v) }
+        se t == "tupla" { retorna isto.exibirTupla(v, "") }
+        se t == "dicionario" { retorna isto.exibirDicionario(v) }
+        se t == "funcao" ou t == "nativa" { retorna "<função />" }
+        se t == "objeto" { retorna isto.exibirObjeto(v) }
+        se t == "classe" { retorna isto.exibirValorClasse(v) }
+        se t == "interface" { retorna "<interface " + isto.comoClasse(v).nome + ">" }
+        se t == "modulo" { retorna "<módulo " + isto.caminhoExibicao(isto.comoModulo(v).caminho) + ">" }
+        se t == "soquete" { retorna "<soquete>" }
         retorna "?"
     }
 
+    // Números inteiros sem notação científica (o `texto(número)` do hospedeiro mostra
+    // 3628800 como 3.6288e+06).
+    formatarNumero(n: número): texto {
+        // NaN e infinitos como no núcleo de Delégua (o hospedeiro mostra -nan(ind), inf).
+        // `nao (a == b)` e não `a != b`: no programa compilado, `!=` com NaN dá falso.
+        se nao (n == n) { retorna "NaN" }
+        se nao (n - n == 0) {
+            se n > 0 { retorna "Infinity" }
+            retorna "-Infinity"
+        }
+        se n > -1000000000000000 e n < 1000000000000000 {
+            var inteiroLongo: longo = n
+            var deVolta: número = inteiroLongo
+            se deVolta == n {
+                retorna texto(inteiroLongo)
+            }
+        }
+        retorna texto(n)
+    }
+
+    // [1, 'a', verdadeiro, nulo, [2, 3], {"k":"x"}]
+    exibirVetor(v: dicionário): texto {
+        var conteudo: ValorVetor = isto.comoVetor(v)
+        var resultado: texto = "["
+        var i: inteiro = 0
+        enquanto i < conteudo.tamanho() {
+            se i > 0 { resultado = resultado + ", " }
+            var elemento: dicionário = conteudo.obter(i)
+            var tipoElemento: texto = isto.tipoDe(elemento)
+            se tipoElemento == "texto" {
+                resultado = resultado + "'" + isto.comoTexto(elemento) + "'"
+            } senao se tipoElemento == "tupla" {
+                resultado = resultado + isto.exibirTupla(elemento, "\"")
+            } senao {
+                resultado = resultado + isto.paraTextoExibicao(elemento)
+            }
+            i = i + 1
+        }
+        retorna resultado + "]"
+    }
+
+    // {"a":1,"b":"t","c":[1,2]} — dentro de dicionários, como JSON.
+    exibirDicionario(v: dicionário): texto {
+        var conteudo: ValorDicionario = isto.comoDicionario(v)
+        var chaves: texto[] = conteudo.chaves()
+        var resultado: texto = "{"
+        var i: inteiro = 0
+        enquanto i < chaves.tamanho() {
+            se i > 0 { resultado = resultado + "," }
+            var chave: texto = chaves[i]
+            resultado = resultado + "\"" + chave + "\":" + isto.exibirComoJson(conteudo.obter(chave))
+            i = i + 1
+        }
+        retorna resultado + "}"
+    }
+
+    exibirComoJson(v: dicionário): texto {
+        var t: texto = isto.tipoDe(v)
+        se t == "texto" { retorna "\"" + isto.comoTexto(v) + "\"" }
+        se t == "dicionario" { retorna isto.exibirDicionario(v) }
+        se t == "tupla" { retorna isto.exibirTupla(v, "\"") }
+        se t == "vetor" {
+            var conteudo: ValorVetor = isto.comoVetor(v)
+            var resultado: texto = "["
+            var i: inteiro = 0
+            enquanto i < conteudo.tamanho() {
+                se i > 0 { resultado = resultado + "," }
+                resultado = resultado + isto.exibirComoJson(conteudo.obter(i))
+                i = i + 1
+            }
+            retorna resultado + "]"
+        }
+        retorna isto.paraTextoExibicao(v)
+    }
+
+    // ── Conversões ──
+
     paraNumero(v: dicionário): número {
-        se v["tipo"] == "numero" {
+        var t: texto = isto.tipoDe(v)
+        se t == "numero" {
             var n: número = v["valor"]
             retorna n
         }
-        se v["tipo"] == "texto" {
-            var t: texto = v["valor"]
-            retorna numero(t)
+        se t == "texto" {
+            retorna numero(isto.comoTexto(v))
         }
         retorna 0
     }
 
+    paraInteiro(v: dicionário): inteiro {
+        var n: número = isto.paraNumero(v)
+        var i: inteiro = n
+        retorna i
+    }
+
+    // Parte inteira (como Math.trunc), sem passar pelo `inteiro` de 32 bits da compilação:
+    // `inteiro(1000000000000)` deve dar 1000000000000.
+    truncarNumero(v: dicionário): número {
+        var n: número = isto.paraNumero(v)
+        // NaN e infinitos ficam como estão (n - n não é 0 para eles).
+        var diferenca: número = n - n
+        se nao (diferenca == 0) { retorna n }
+        var resto: número = n % 1
+        retorna n - resto
+    }
+
+    // Chaves de dicionário são guardadas como texto (números viram seu texto).
+    paraChave(v: dicionário): texto {
+        var t: texto = isto.tipoDe(v)
+        se t == "texto" ou t == "numero" ou t == "logico" {
+            retorna isto.paraTextoExibicao(v)
+        }
+        falhar("Chave de dicionário deve ser texto ou número, não " + isto.nomeTipo(v) + ".")
+        retorna ""
+    }
+
+    eVerdadeiro(valor: dicionário): lógico {
+        var t: texto = isto.tipoDe(valor)
+        se t == "nulo" { retorna falso }
+        se t == "logico" {
+            var l: lógico = valor["valor"]
+            retorna l
+        }
+        retorna verdadeiro
+    }
+
+    // Igualdade de Delégua: tipos diferentes nunca são iguais; vetores e dicionários
+    // comparam por referência.
+    valoresIguais(a: dicionário, b: dicionário): lógico {
+        var tipoA: texto = isto.tipoDe(a)
+        var tipoB: texto = isto.tipoDe(b)
+        se tipoA != tipoB { retorna falso }
+        se tipoA == "nulo" { retorna verdadeiro }
+        se tipoA == "numero" { retorna isto.paraNumero(a) == isto.paraNumero(b) }
+        se tipoA == "texto" { retorna isto.comoTexto(a) == isto.comoTexto(b) }
+        se tipoA == "logico" { retorna isto.eVerdadeiro(a) == isto.eVerdadeiro(b) }
+        se tipoA == "vetor" { retorna isto.comoVetor(a).identificador == isto.comoVetor(b).identificador }
+        se tipoA == "dicionario" { retorna isto.comoDicionario(a).identificador == isto.comoDicionario(b).identificador }
+        se tipoA == "tupla" { retorna isto.comoVetor(a).identificador == isto.comoVetor(b).identificador }
+        se tipoA == "soquete" { retorna isto.paraNumero(a) == isto.paraNumero(b) }
+        se tipoA == "objeto" { retorna isto.comoObjeto(a).identificador == isto.comoObjeto(b).identificador }
+        se tipoA == "classe" { retorna isto.comoClasse(a).identificador == isto.comoClasse(b).identificador }
+        se tipoA == "modulo" { retorna isto.comoModulo(a).identificador == isto.comoModulo(b).identificador }
+        retorna falso
+    }
+
+    // ── Nativas ──
+
     chamarNativo(nome: texto, args: qualquer[]): dicionário {
+        // Funções de módulos nativos: "modulo.funcao".
+        var ponto: inteiro = nome.encontrar(".", 0)
+        se ponto > 0 {
+            retorna isto.nativos.chamar(nome.subtexto(0, ponto), nome.subtexto(ponto + 1, nome.tamanho()), args)
+        }
         se nome == "escreva" {
-            escreva(isto.paraTextoExibicao(args[0]))
-            retorna isto.criarValor("nulo", nulo)
+            var saida: texto = ""
+            var i: inteiro = 0
+            enquanto i < args.tamanho() {
+                se i > 0 { saida = saida + " " }
+                saida = saida + isto.paraTextoExibicao(args[i])
+                i = i + 1
+            }
+            // Como no núcleo de Delégua, espaços e quebras de linha no fim da saída são removidos.
+            escreva(saida.apararFim())
+            retorna isto.criarNulo()
         }
         se nome == "concatenar" {
             retorna isto.criarValor("texto", isto.paraTextoExibicao(args[0]) + isto.paraTextoExibicao(args[1]))
@@ -85,14 +426,48 @@ classe Interpretador {
             retorna isto.criarValor("numero", isto.paraNumero(args[0]))
         }
         se nome == "tipo" {
-            var primeiro: dicionário = args[0]
-            retorna isto.criarValor("texto", primeiro["tipo"])
+            retorna isto.criarValor("texto", isto.nomeTipo(args[0]))
         }
         se nome == "inteiro" {
-            var n: número = isto.paraNumero(args[0])
-            var i: inteiro = n
-            var iNum: número = i
+            var iNum: número = isto.truncarNumero(args[0])
             retorna isto.criarValor("numero", iNum)
+        }
+        se isto.eNativaDeColecao(nome) { retorna isto.chamarNativoColecao(nome, args) }
+        se nome == "real" { retorna isto.criarValor("numero", isto.paraNumero(args[0])) }
+        se nome == "longo" {
+            var numeroLongo: número = isto.truncarNumero(args[0])
+            retorna isto.criarValor("numero", numeroLongo)
+        }
+        se nome == "arredondar" {
+            var casasArredondar: inteiro = 0
+            se args.tamanho() > 1 { casasArredondar = isto.paraInteiro(args[1]) }
+            retorna isto.criarValor("numero", isto.arredondarNumero(isto.paraNumero(args[0]), casasArredondar))
+        }
+        se nome == "aleatorio" { retorna isto.criarValor("numero", isto.nativos.numeroAleatorio()) }
+        se nome == "aleatorioEntre" {
+            var minimoSorteio: número = isto.paraNumero(args[0])
+            var maximoSorteio: número = isto.paraNumero(args[1])
+            var sorteado: número = isto.piso(isto.nativos.numeroAleatorio() * (maximoSorteio - minimoSorteio + 1)) + minimoSorteio
+            retorna isto.criarValor("numero", sorteado)
+        }
+        se nome == "intervalo" {
+            var inicioIntervalo: inteiro = 0
+            var fimIntervalo: inteiro = isto.paraInteiro(args[0])
+            se args.tamanho() > 1 {
+                inicioIntervalo = fimIntervalo
+                fimIntervalo = isto.paraInteiro(args[1])
+            }
+            var numerosIntervalo: dicionário[] = []
+            var atualIntervalo: inteiro = inicioIntervalo
+            enquanto atualIntervalo < fimIntervalo {
+                var numeroIntervalo: número = atualIntervalo
+                numerosIntervalo.adicionar(isto.criarValor("numero", numeroIntervalo))
+                atualIntervalo = atualIntervalo + 1
+            }
+            retorna isto.criarVetor(numerosIntervalo)
+        }
+        se nome == "tamanho" {
+            retorna isto.chamarMetodo(args[0], "tamanho", [])
         }
         se nome == "leia" {
             se args.tamanho() > 0 {
@@ -101,6 +476,299 @@ classe Interpretador {
             retorna isto.criarValor("texto", leia())
         }
         falhar("Função nativa não encontrada: " + nome)
+        retorna nulo
+    }
+
+    // ── Métodos de primitivas (vetor, dicionário, texto) ──
+
+    exigirArgumentos(nomeMetodo: texto, args: qualquer[], quantidade: inteiro) {
+        se args.tamanho() < quantidade {
+            falhar("Método '" + nomeMetodo + "' espera " + texto(quantidade) + " argumento(s).")
+        }
+    }
+
+    chamarMetodo(objeto: dicionário, nomeMetodo: texto, args: qualquer[]): dicionário {
+        var t: texto = isto.tipoDe(objeto)
+        var extensaoEncontrada: dicionário = isto.procurarExtensao(t, nomeMetodo)
+        se isto.encontrou(extensaoEncontrada) {
+            retorna isto.chamarFuncaoComVinculo(extensaoEncontrada["metodo"], args, objeto, isto.criarNulo())
+        }
+        se t == "vetor" { retorna isto.chamarMetodoVetor(objeto, nomeMetodo, args) }
+        se t == "tupla" {
+            se nomeMetodo == "paraVetor" { retorna isto.copiarComo(isto.comoVetor(objeto), "vetor") }
+            retorna isto.chamarMetodoVetor(objeto, nomeMetodo, args)
+        }
+        se t == "numero" { retorna isto.chamarMetodoNumero(objeto, nomeMetodo, args) }
+        se t == "dicionario" { retorna isto.chamarMetodoDicionario(objeto, nomeMetodo, args) }
+        se t == "texto" { retorna isto.chamarMetodoTexto(objeto, nomeMetodo, args) }
+        falhar("Método '" + nomeMetodo + "' não existe para o tipo " + isto.nomeTipo(objeto) + ".")
+        retorna nulo
+    }
+
+    chamarMetodoVetor(objeto: dicionário, nomeMetodo: texto, args: qualquer[]): dicionário {
+        var conteudo: ValorVetor = isto.comoVetor(objeto)
+        se nomeMetodo == "tamanho" {
+            var n: número = conteudo.tamanho()
+            retorna isto.criarValor("numero", n)
+        }
+        // Como no núcleo de Delégua, só o primeiro argumento é acrescentado.
+        se nomeMetodo == "adicionar" ou nomeMetodo == "empilhar" {
+            isto.exigirArgumentos(nomeMetodo, args, 1)
+            conteudo.adicionar(args[0])
+            retorna objeto
+        }
+        se nomeMetodo == "removerUltimo" ou nomeMetodo == "removerÚltimo" {
+            se conteudo.tamanho() == 0 { retorna isto.criarNulo() }
+            var ultimo: dicionário = conteudo.obter(conteudo.tamanho() - 1)
+            conteudo.elementos.removerUltimo()
+            retorna ultimo
+        }
+        se nomeMetodo == "removerPrimeiro" {
+            se conteudo.tamanho() == 0 { retorna isto.criarNulo() }
+            var primeiro: dicionário = conteudo.obter(0)
+            conteudo.elementos.removerPrimeiro()
+            retorna primeiro
+        }
+        se nomeMetodo == "inclui" ou nomeMetodo == "contem" ou nomeMetodo == "contém" {
+            isto.exigirArgumentos(nomeMetodo, args, 1)
+            var procurado: dicionário = args[0]
+            var j: inteiro = 0
+            enquanto j < conteudo.tamanho() {
+                se isto.valoresIguais(conteudo.obter(j), procurado) {
+                    retorna isto.criarValor("logico", verdadeiro)
+                }
+                j = j + 1
+            }
+            retorna isto.criarValor("logico", falso)
+        }
+        se nomeMetodo == "juntar" {
+            var separador: texto = ","
+            se args.tamanho() > 0 { separador = isto.paraTextoExibicao(args[0]) }
+            var resultado: texto = ""
+            var k: inteiro = 0
+            enquanto k < conteudo.tamanho() {
+                se k > 0 { resultado = resultado + separador }
+                resultado = resultado + isto.paraTextoExibicao(conteudo.obter(k))
+                k = k + 1
+            }
+            retorna isto.criarValor("texto", resultado)
+        }
+        se nomeMetodo == "fatiar" {
+            var inicio: inteiro = 0
+            var fim: inteiro = conteudo.tamanho()
+            se args.tamanho() > 0 { inicio = isto.paraInteiro(args[0]) }
+            se args.tamanho() > 1 { fim = isto.paraInteiro(args[1]) }
+            se inicio < 0 { inicio = conteudo.tamanho() + inicio }
+            se fim < 0 { fim = conteudo.tamanho() + fim }
+            se inicio < 0 { inicio = 0 }
+            se fim > conteudo.tamanho() { fim = conteudo.tamanho() }
+            var fatia: dicionário[] = []
+            var m: inteiro = inicio
+            enquanto m < fim {
+                fatia.adicionar(conteudo.obter(m))
+                m = m + 1
+            }
+            retorna isto.criarVetor(fatia)
+        }
+        retorna isto.chamarMetodoVetorExtra(objeto, nomeMetodo, args)
+    }
+
+    chamarMetodoDicionario(objeto: dicionário, nomeMetodo: texto, args: qualquer[]): dicionário {
+        var conteudo: ValorDicionario = isto.comoDicionario(objeto)
+        se nomeMetodo == "tamanho" {
+            var n: número = conteudo.tamanho()
+            retorna isto.criarValor("numero", n)
+        }
+        se nomeMetodo == "contem" ou nomeMetodo == "contém" {
+            isto.exigirArgumentos(nomeMetodo, args, 1)
+            var chave: texto = isto.paraChave(args[0])
+            retorna isto.criarValor("logico", conteudo.contem(chave))
+        }
+        se nomeMetodo == "remover" {
+            isto.exigirArgumentos(nomeMetodo, args, 1)
+            var chaveRemovida: texto = isto.paraChave(args[0])
+            retorna isto.criarValor("logico", conteudo.remover(chaveRemovida))
+        }
+        // mesclar/concatenar: novo dicionário com as entradas dos dois (as do argumento vencem).
+        se nomeMetodo == "mesclar" ou nomeMetodo == "concatenar" {
+            isto.exigirArgumentos(nomeMetodo, args, 1)
+            var mesclado: dicionário = isto.clonarValor(objeto)
+            var destinoMescla: ValorDicionario = isto.comoDicionario(mesclado)
+            var argumentoMescla: dicionário = args[0]
+            se isto.tipoDe(argumentoMescla) != "dicionario" {
+                falhar("Método '" + nomeMetodo + "' espera um dicionário.")
+            }
+            var origemMescla: ValorDicionario = isto.comoDicionario(argumentoMescla)
+            var chavesMescla: texto[] = origemMescla.chaves()
+            var m: inteiro = 0
+            enquanto m < chavesMescla.tamanho() {
+                var chaveMescla: texto = chavesMescla[m]
+                destinoMescla.definir(chaveMescla, origemMescla.obter(chaveMescla))
+                m = m + 1
+            }
+            retorna mesclado
+        }
+        se nomeMetodo == "obter" {
+            isto.exigirArgumentos(nomeMetodo, args, 1)
+            var chaveObter: texto = isto.paraChave(args[0])
+            se conteudo.contem(chaveObter) { retorna conteudo.obter(chaveObter) }
+            se args.tamanho() > 1 {
+                var padraoObter: dicionário = args[1]
+                retorna padraoObter
+            }
+            retorna isto.criarNulo()
+        }
+        se nomeMetodo == "itens" {
+            var chavesItens: texto[] = conteudo.chaves()
+            var pares: dicionário[] = []
+            var n: inteiro = 0
+            enquanto n < chavesItens.tamanho() {
+                var chaveItem: texto = chavesItens[n]
+                var parItem: dicionário[] = []
+                parItem.adicionar(isto.criarValor("texto", chaveItem))
+                parItem.adicionar(conteudo.obter(chaveItem))
+                pares.adicionar(isto.criarTupla(parItem))
+                n = n + 1
+            }
+            retorna isto.criarVetor(pares)
+        }
+        se nomeMetodo == "chaves" ou nomeMetodo == "valores" {
+            var chaves: texto[] = conteudo.chaves()
+            var itens: dicionário[] = []
+            var i: inteiro = 0
+            enquanto i < chaves.tamanho() {
+                var chaveAtual: texto = chaves[i]
+                se nomeMetodo == "chaves" {
+                    itens.adicionar(isto.criarValor("texto", chaveAtual))
+                } senao {
+                    itens.adicionar(conteudo.obter(chaveAtual))
+                }
+                i = i + 1
+            }
+            retorna isto.criarVetor(itens)
+        }
+        // d.chave(...): chave que guarda uma função.
+        se conteudo.contem(nomeMetodo) {
+            retorna isto.chamarValor(conteudo.obter(nomeMetodo), args, nomeMetodo)
+        }
+        falhar("Método '" + nomeMetodo + "' não existe para dicionário.")
+        retorna nulo
+    }
+
+    criarVetorDeTextos(partes: texto[]): dicionário {
+        var itens: dicionário[] = []
+        var i: inteiro = 0
+        enquanto i < partes.tamanho() {
+            var parte: texto = partes[i]
+            itens.adicionar(isto.criarValor("texto", parte))
+            i = i + 1
+        }
+        retorna isto.criarVetor(itens)
+    }
+
+    argumentoTexto(args: qualquer[], posicao: inteiro): texto {
+        retorna isto.paraTextoExibicao(args[posicao])
+    }
+
+    // Primitivas de texto do núcleo de Delégua. Índices e tamanhos contam caracteres.
+    chamarMetodoTexto(objeto: dicionário, nomeMetodo: texto, args: qualquer[]): dicionário {
+        var valorTexto: texto = isto.comoTexto(objeto)
+        se nomeMetodo == "tamanho" {
+            var n: número = isto.tamanhoTexto(objeto)
+            retorna isto.criarValor("numero", n)
+        }
+        se nomeMetodo == "dividir" {
+            se args.tamanho() == 0 {
+                retorna isto.criarVetorDeTextos(isto.caracteresTexto(objeto))
+            }
+            var separador: texto = isto.argumentoTexto(args, 0)
+            se separador == "" {
+                retorna isto.criarVetorDeTextos(isto.caracteresTexto(objeto))
+            }
+            var partes: texto[] = valorTexto.dividir(separador)
+            retorna isto.criarVetorDeTextos(partes)
+        }
+        se nomeMetodo == "aparar" { retorna isto.criarValor("texto", valorTexto.aparar()) }
+        se nomeMetodo == "apararInicio" ou nomeMetodo == "apararInício" { retorna isto.criarValor("texto", valorTexto.apararInicio()) }
+        se nomeMetodo == "apararFim" { retorna isto.criarValor("texto", valorTexto.apararFim()) }
+        se nomeMetodo == "maiusculo" ou nomeMetodo == "maiúsculo" ou nomeMetodo == "tudoMaiusculo" ou nomeMetodo == "tudoMaiúsculo" {
+            se isto.ehAscii(objeto) { retorna isto.criarValor("texto", valorTexto.maiusculo()) }
+            retorna isto.criarValor("texto", isto.utf8.maiusculo(valorTexto))
+        }
+        se nomeMetodo == "minusculo" ou nomeMetodo == "minúsculo" ou nomeMetodo == "tudoMinusculo" ou nomeMetodo == "tudoMinúsculo" {
+            se isto.ehAscii(objeto) { retorna isto.criarValor("texto", valorTexto.minusculo()) }
+            retorna isto.criarValor("texto", isto.utf8.minusculo(valorTexto))
+        }
+        se nomeMetodo == "concatenar" {
+            var concatenado: texto = valorTexto
+            var j: inteiro = 0
+            enquanto j < args.tamanho() {
+                concatenado = concatenado + isto.argumentoTexto(args, j)
+                j = j + 1
+            }
+            retorna isto.criarValor("texto", concatenado)
+        }
+        se nomeMetodo == "inclui" ou nomeMetodo == "contem" ou nomeMetodo == "contém" {
+            isto.exigirArgumentos(nomeMetodo, args, 1)
+            var achou: lógico = falso
+            se valorTexto.encontrar(isto.argumentoTexto(args, 0), 0) >= 0 { achou = verdadeiro }
+            retorna isto.criarValor("logico", achou)
+        }
+        se nomeMetodo == "terminaCom" {
+            isto.exigirArgumentos(nomeMetodo, args, 1)
+            var sufixo: texto = isto.argumentoTexto(args, 0)
+            var termina: lógico = falso
+            se sufixo.tamanho() <= valorTexto.tamanho() {
+                var final: texto = valorTexto.subtexto(valorTexto.tamanho() - sufixo.tamanho(), valorTexto.tamanho())
+                se final == sufixo { termina = verdadeiro }
+            }
+            retorna isto.criarValor("logico", termina)
+        }
+        se nomeMetodo == "encontrar" {
+            isto.exigirArgumentos(nomeMetodo, args, 1)
+            var procurado: texto = isto.argumentoTexto(args, 0)
+            var inicioBusca: inteiro = 0
+            se args.tamanho() > 1 { inicioBusca = isto.limitarIndice(isto.paraInteiro(args[1]), isto.tamanhoTexto(objeto)) }
+            var posicao: inteiro = -1
+            se isto.ehAscii(objeto) {
+                posicao = valorTexto.encontrar(procurado, inicioBusca)
+            } senao {
+                posicao = isto.utf8.encontrar(valorTexto, procurado, inicioBusca)
+            }
+            var posicaoNumero: número = posicao
+            retorna isto.criarValor("numero", posicaoNumero)
+        }
+        se nomeMetodo == "subtexto" ou nomeMetodo == "fatiar" {
+            var tamanhoTexto: inteiro = isto.tamanhoTexto(objeto)
+            var inicio: inteiro = 0
+            var fim: inteiro = tamanhoTexto
+            se args.tamanho() > 0 { inicio = isto.limitarIndice(isto.paraInteiro(args[0]), tamanhoTexto) }
+            se args.tamanho() > 1 { fim = isto.limitarIndice(isto.paraInteiro(args[1]), tamanhoTexto) }
+            retorna isto.criarValor("texto", isto.subtextoTexto(objeto, inicio, fim))
+        }
+        // Substitui só a primeira ocorrência, como no núcleo de Delégua.
+        se nomeMetodo == "substituir" {
+            isto.exigirArgumentos(nomeMetodo, args, 2)
+            var antigo: texto = isto.argumentoTexto(args, 0)
+            var novo: texto = isto.argumentoTexto(args, 1)
+            se antigo == "" { retorna objeto }
+            var posicaoBytes: inteiro = valorTexto.encontrar(antigo, 0)
+            se posicaoBytes < 0 { retorna objeto }
+            var antes: texto = valorTexto.subtexto(0, posicaoBytes)
+            var depois: texto = valorTexto.subtexto(posicaoBytes + antigo.tamanho(), valorTexto.tamanho())
+            retorna isto.criarValor("texto", antes + novo + depois)
+        }
+        se nomeMetodo == "inverter" {
+            var caracteres: texto[] = isto.caracteresTexto(objeto)
+            var invertido: texto = ""
+            var k: inteiro = caracteres.tamanho() - 1
+            enquanto k >= 0 {
+                invertido = invertido + caracteres[k]
+                k = k - 1
+            }
+            retorna isto.criarValor("texto", invertido)
+        }
+        falhar("Método '" + nomeMetodo + "' não existe para texto.")
         retorna nulo
     }
 
@@ -115,30 +783,39 @@ classe Interpretador {
         retorna c
     }
 
-    eControleRetorno(v: qualquer): lógico {
-        se v == nulo { retorna falso }
+    // "retornar", "sustar", "continuar", ou "" se `v` não for um sinal de controle.
+    tipoControle(v: qualquer): texto {
+        se v == nulo { retorna "" }
         var d: dicionário = v
-        retorna d["_controle"] == "retornar"
+        se nao d.contem("_controle") { retorna "" }
+        var tipoSinal: texto = d["_controle"]
+        retorna tipoSinal
     }
 
-    eVerdadeiro(valor: dicionário): lógico {
-        se valor == nulo ou valor["tipo"] == "nulo" { retorna falso }
-        se valor["tipo"] == "logico" {
-            var l: lógico = valor["valor"]
-            retorna l
-        }
-        retorna verdadeiro
+    eControle(v: qualquer): lógico {
+        retorna isto.tipoControle(v) != ""
     }
+
+    eControleRetorno(v: qualquer): lógico {
+        retorna isto.tipoControle(v) == "retornar"
+    }
+
+    nomeComandoControle(sinal: texto): texto {
+        se sinal == "continuar" { retorna "continua" }
+        retorna sinal
+    }
+
+    // ── Expressões ──
 
     avaliar(no: Construto): dicionário {
-        se no == nulo { retorna isto.criarValor("nulo", nulo) }
+        se no == nulo { retorna isto.criarNulo() }
         var t: texto = no.noh
 
         se t == "Literal" {
             se no.tipoLiteral == "numero" { retorna isto.criarValor("numero", no.literalNumero) }
             se no.tipoLiteral == "texto" { retorna isto.criarValor("texto", no.literalTexto) }
             se no.tipoLiteral == "logico" { retorna isto.criarValor("logico", no.literalLogico) }
-            retorna isto.criarValor("nulo", nulo)
+            retorna isto.criarNulo()
         }
         se t == "Agrupamento" { retorna isto.avaliar(no.expressao) }
         se t == "Variavel" { retorna isto.pilha.obterValorVariavel(no.simbolo.lexema) }
@@ -147,21 +824,1466 @@ classe Interpretador {
         se t == "Logico" { retorna isto.avaliarLogico(no) }
         se t == "Chamada" { retorna isto.avaliarChamada(no) }
         se t == "Atribuicao" { retorna isto.avaliarAtribuicao(no) }
-        retorna isto.criarValor("nulo", nulo)
+        se t == "Incremento" { retorna isto.avaliarIncremento(no) }
+        se t == "TipoDe" { retorna isto.criarValor("texto", isto.nomeTipo(isto.avaliar(no.operando))) }
+        se t == "Vetor" { retorna isto.avaliarVetor(no) }
+        se t == "Tupla" {
+            var vetorTupla: dicionário = isto.avaliarVetor(no)
+            retorna isto.criarTupla(isto.comoVetor(vetorTupla).elementos)
+        }
+        se t == "Ternario" {
+            se isto.eVerdadeiro(isto.avaliar(no.operando)) { retorna isto.avaliar(no.esquerda) }
+            retorna isto.avaliar(no.direita)
+        }
+        se t == "Interpolacao" {
+            var interpolado: texto = ""
+            var indiceParte: inteiro = 0
+            enquanto indiceParte < no.elementos.tamanho() {
+                interpolado = interpolado + isto.paraTextoExibicao(isto.avaliar(no.elementos[indiceParte]))
+                indiceParte = indiceParte + 1
+            }
+            retorna isto.criarValor("texto", interpolado)
+        }
+        se t == "Dicionario" { retorna isto.avaliarDicionario(no) }
+        se t == "AcessoIndice" { retorna isto.avaliarAcessoIndice(no) }
+        se t == "Importar" { retorna isto.carregarModulo(no.literalTexto) }
+        se t == "FuncaoAnonima" {
+            var declaracaoAnonima: Declaracao = no.funcaoAnonima
+            retorna isto.criarValorFuncao(declaracaoAnonima)
+        }
+        se t == "Isto" {
+            se nao isto.pilha.existe("isto") { falhar("'isto' usado fora de um método de classe.") }
+            retorna isto.pilha.obterValorVariavel("isto")
+        }
+        se t == "Super" { falhar("'super' deve ser chamado: super(...) ou super.metodo(...).") }
+        se t == "AcessoMembro" {
+            var objetoAcessado: dicionário = isto.avaliar(no.objetoAcessado)
+            se isto.tipoDe(objetoAcessado) == "modulo" {
+                retorna isto.membroDeModulo(objetoAcessado, no.nomeMembro)
+            }
+            // dicionario.chave: o valor da chave, ou nulo.
+            se isto.tipoDe(objetoAcessado) == "dicionario" {
+                var dicionarioAcessado: ValorDicionario = isto.comoDicionario(objetoAcessado)
+                se dicionarioAcessado.contem(no.nomeMembro) { retorna dicionarioAcessado.obter(no.nomeMembro) }
+                retorna isto.criarNulo()
+            }
+            se isto.tipoDe(objetoAcessado) == "objeto" {
+                var objetoMembro: ValorObjeto = isto.comoObjeto(objetoAcessado)
+                se objetoMembro.temCampo(no.nomeMembro) { retorna objetoMembro.obterCampo(no.nomeMembro) }
+                se isto.encontrou(isto.procurarMetodo(objetoMembro.classeObjeto, no.nomeMembro)) {
+                    falhar("Método '" + no.nomeMembro + "' deve ser chamado com '()'.")
+                }
+                retorna isto.criarNulo()
+            }
+            falhar("Propriedade '" + no.nomeMembro + "' não suportada; métodos devem ser chamados com '()'.")
+        }
+        falhar("Construto não suportado: " + t + ".")
+        retorna nulo
     }
+
+    avaliarVetor(no: Construto): dicionário {
+        var elementos: dicionário[] = []
+        var i: inteiro = 0
+        enquanto i < no.elementos.tamanho() {
+            elementos.adicionar(isto.avaliar(no.elementos[i]))
+            i = i + 1
+        }
+        retorna isto.criarVetor(elementos)
+    }
+
+    avaliarDicionario(no: Construto): dicionário {
+        var conteudo: ValorDicionario = ValorDicionario(isto.novoIdentificador())
+        var i: inteiro = 0
+        enquanto i < no.chavesDicionario.tamanho() {
+            var chave: texto = isto.paraChave(isto.avaliar(no.chavesDicionario[i]))
+            conteudo.definir(chave, isto.avaliar(no.valoresDicionario[i]))
+            i = i + 1
+        }
+        // A instância é passada a criarValor a partir de uma variável local: repassar um
+        // parâmetro de tipo classe para um parâmetro `qualquer` quebra o programa compilado
+        // (delegua-llvm).
+        retorna isto.criarValor("dicionario", conteudo)
+    }
+
+    avaliarAcessoIndice(no: Construto): dicionário {
+        var objeto: dicionário = isto.avaliar(no.objetoAcessado)
+        var indice: dicionário = isto.avaliar(no.indice)
+        var t: texto = isto.tipoDe(objeto)
+
+        se t == "vetor" ou t == "tupla" {
+            var conteudo: ValorVetor = isto.comoVetor(objeto)
+            var posicao: inteiro = conteudo.posicao(isto.paraInteiro(indice))
+            se posicao < 0 {
+                falhar("Índice " + isto.paraTextoExibicao(indice) + " fora do vetor de tamanho " + texto(conteudo.tamanho()) + ".")
+            }
+            retorna conteudo.obter(posicao)
+        }
+        se t == "dicionario" {
+            var conteudoDicionario: ValorDicionario = isto.comoDicionario(objeto)
+            var chave: texto = isto.paraChave(indice)
+            se nao conteudoDicionario.contem(chave) { retorna isto.criarNulo() }
+            retorna conteudoDicionario.obter(chave)
+        }
+        se t == "texto" {
+            var tamanhoTexto: inteiro = isto.tamanhoTexto(objeto)
+            var i: inteiro = isto.paraInteiro(indice)
+            se i < 0 { i = tamanhoTexto + i }
+            se i < 0 ou i >= tamanhoTexto {
+                falhar("Índice " + isto.paraTextoExibicao(indice) + " fora do texto de tamanho " + texto(tamanhoTexto) + ".")
+            }
+            retorna isto.criarValor("texto", isto.subtextoTexto(objeto, i, i + 1))
+        }
+        falhar("Tipo " + isto.nomeTipo(objeto) + " não suporta acesso por índice.")
+        retorna nulo
+    }
+
+    // ── Funções, classes e objetos ──
+
+    // Valor "funcao" de uma DeclaracaoFuncao (declarada, método ou anônima), com os escopos
+    // visíveis agora (escopo léxico, inclusive captura de variáveis locais).
+    criarValorFuncao(declaracao: Declaracao): dicionário {
+        var nomesParametros: texto[] = []
+        var i: inteiro = 0
+        enquanto i < declaracao.funcaoParametros.tamanho() {
+            nomesParametros.adicionar(declaracao.funcaoParametros[i].lexema)
+            i = i + 1
+        }
+        var escoposVisiveis: EspacoMemoria[] = isto.pilha.capturar()
+        var dadosFuncao: ValorFuncao = ValorFuncao(nomesParametros, declaracao.funcaoCorpo, escoposVisiveis, isto.arquivoAtual, isto.diretorioAtual)
+        dadosFuncao.variadica = declaracao.funcaoVariadica
+        dadosFuncao.padroes = declaracao.funcaoPadroes
+        retorna isto.criarValor("funcao", dadosFuncao)
+    }
+
+    comoClasse(v: dicionário): ValorClasse {
+        var conteudo: ValorClasse = v["valor"]
+        retorna conteudo
+    }
+
+    comoObjeto(v: dicionário): ValorObjeto {
+        var conteudo: ValorObjeto = v["valor"]
+        retorna conteudo
+    }
+
+    nomeClasseDoObjeto(v: dicionário): texto {
+        var objeto: ValorObjeto = isto.comoObjeto(v)
+        var classeObjeto: ValorClasse = isto.comoClasse(objeto.classeObjeto)
+        retorna classeObjeto.nome
+    }
+
+    eExcecao(v: dicionário): lógico {
+        se isto.tipoDe(v) != "objeto" { retorna falso }
+        retorna isto.nomeClasseDoObjeto(v) == "Excecao"
+    }
+
+    // <[ Nome métodos=[a, b] propriedades=[c] ]>, como no núcleo de Delégua.
+    exibirClasse(nome: texto, ehEstatico: lógico, metodos: texto[], propriedades: texto[]): texto {
+        var marcador: texto = ""
+        se ehEstatico { marcador = " estático" }
+        retorna "<[ " + nome + marcador + " métodos=[" + metodos.juntar(", ") + "] propriedades=[" + propriedades.juntar(", ") + "] ]>"
+    }
+
+    exibirObjeto(v: dicionário): texto {
+        var objeto: ValorObjeto = isto.comoObjeto(v)
+        se isto.eExcecao(v) {
+            retorna isto.paraTextoExibicao(objeto.obterCampo("mensagem"))
+        }
+        var classeObjeto: ValorClasse = isto.comoClasse(objeto.classeObjeto)
+        retorna isto.exibirClasse(classeObjeto.nome, falso, classeObjeto.nomesMetodos, objeto.nomesCampos)
+    }
+
+    exibirValorClasse(v: dicionário): texto {
+        var classeValor: ValorClasse = isto.comoClasse(v)
+        retorna isto.exibirClasse(classeValor.nome, verdadeiro, classeValor.nomesMetodos, classeValor.campos)
+    }
+
+    // Procura `nome` na classe e nas superclasses. Devolve {"encontrado": "s"|"n",
+    // "metodo": valor "funcao", "classe": classe onde está o método}.
+    procurarMetodo(classeValor: dicionário, nome: texto): dicionário {
+        var atual: dicionário = classeValor
+        var limite: inteiro = 1000
+        enquanto isto.tipoDe(atual) == "classe" e limite > 0 {
+            var conteudo: ValorClasse = isto.comoClasse(atual)
+            se conteudo.temMetodoProprio(nome) {
+                var achado: dicionário = {}
+                achado["encontrado"] = "s"
+                achado["metodo"] = conteudo.metodoProprio(nome)
+                achado["classe"] = atual
+                retorna achado
+            }
+            var indiceMescla: inteiro = 0
+            enquanto indiceMescla < conteudo.mesclas.tamanho() {
+                var classeMesclada: dicionário = conteudo.mesclas[indiceMescla]
+                var achadoMescla: dicionário = isto.procurarMetodo(classeMesclada, nome)
+                se isto.encontrou(achadoMescla) { retorna achadoMescla }
+                indiceMescla = indiceMescla + 1
+            }
+            atual = conteudo.superclasse
+            limite = limite - 1
+        }
+        var naoAchado: dicionário = {}
+        naoAchado["encontrado"] = "n"
+        retorna naoAchado
+    }
+
+    encontrou(resultadoBusca: dicionário): lógico {
+        var marcador: texto = resultadoBusca["encontrado"]
+        retorna marcador == "s"
+    }
+
+    // Campos declarados na classe e nas superclasses (das mais gerais às mais específicas).
+    inicializarCampos(objeto: ValorObjeto, classeValor: dicionário) {
+        var conteudo: ValorClasse = isto.comoClasse(classeValor)
+        se conteudo.temSuperclasse() {
+            isto.inicializarCampos(objeto, conteudo.superclasse)
+        }
+        var i: inteiro = 0
+        enquanto i < conteudo.campos.tamanho() {
+            var nomeCampo: texto = conteudo.campos[i]
+            se nao objeto.temCampo(nomeCampo) {
+                objeto.definirCampo(nomeCampo, isto.criarNulo())
+            }
+            i = i + 1
+        }
+    }
+
+    instanciar(classeValor: dicionário, args: qualquer[]): dicionário {
+        var classeInstanciada: ValorClasse = isto.comoClasse(classeValor)
+        se classeInstanciada.ehEstrangeira {
+            falhar("Não é possível instanciar a classe estrangeira '" + classeInstanciada.nome + "' diretamente.")
+        }
+        se classeInstanciada.ehAbstrata {
+            falhar("Não é possível instanciar a classe abstrata '" + classeInstanciada.nome + "' diretamente.")
+        }
+        var objeto: ValorObjeto = ValorObjeto(classeValor, isto.novoIdentificador())
+        isto.inicializarCampos(objeto, classeValor)
+        var valorObjeto: dicionário = isto.criarValor("objeto", objeto)
+        var busca: dicionário = isto.procurarMetodo(classeValor, "construtor")
+        se isto.encontrou(busca) {
+            isto.chamarFuncaoComVinculo(busca["metodo"], args, valorObjeto, busca["classe"])
+        } senao se args.tamanho() > 0 {
+            falhar("A classe " + isto.comoClasse(classeValor).nome + " não tem construtor, mas recebeu argumentos.")
+        }
+        retorna valorObjeto
+    }
+
+    criarExcecao(mensagem: texto): dicionário {
+        var argumentosExcecao: qualquer[] = []
+        var excecao: dicionário = isto.instanciar(isto.classeExcecao, argumentosExcecao)
+        var objeto: ValorObjeto = isto.comoObjeto(excecao)
+        objeto.definirCampo("mensagem", isto.criarValor("texto", mensagem))
+        retorna excecao
+    }
+
+    // Chama uma função, nativa ou classe (instanciação).
+    chamarValor(valorEntidade: dicionário, args: qualquer[], descricao: texto): dicionário {
+        var tipoEntidade: texto = isto.tipoDe(valorEntidade)
+        se tipoEntidade == "nativa" {
+            var nomeNativa: texto = valorEntidade["valor"]
+            retorna isto.chamarNativo(nomeNativa, args)
+        }
+        se tipoEntidade == "funcao" {
+            retorna isto.chamarFuncaoUsuario(valorEntidade["valor"], args)
+        }
+        se tipoEntidade == "classe" {
+            retorna isto.instanciar(valorEntidade, args)
+        }
+        se descricao != "" {
+            falhar("Entidade não é chamável: '" + descricao + "'.")
+        }
+        falhar("Entidade não é chamável: valor do tipo " + isto.nomeTipo(valorEntidade) + ".")
+        retorna nulo
+    }
+
+    // objeto.nome(...): método da classe (com `isto`), ou propriedade que guarda uma função.
+    chamarMetodoObjeto(valorObjeto: dicionário, nome: texto, args: qualquer[]): dicionário {
+        var objeto: ValorObjeto = isto.comoObjeto(valorObjeto)
+        var busca: dicionário = isto.procurarMetodo(objeto.classeObjeto, nome)
+        se isto.encontrou(busca) {
+            retorna isto.chamarFuncaoComVinculo(busca["metodo"], args, valorObjeto, busca["classe"])
+        }
+        se objeto.temCampo(nome) {
+            retorna isto.chamarValor(objeto.obterCampo(nome), args, nome)
+        }
+        se nome == "eInstanciaDe" {
+            isto.exigirArgumentos(nome, args, 1)
+            retorna isto.criarValor("logico", isto.verificarInstancia(objeto.classeObjeto, args[0]))
+        }
+        var extensaoObjeto: dicionário = isto.procurarExtensao(isto.nomeClasseDoObjeto(valorObjeto), nome)
+        se isto.encontrou(extensaoObjeto) {
+            retorna isto.chamarFuncaoComVinculo(extensaoObjeto["metodo"], args, valorObjeto, isto.criarNulo())
+        }
+        falhar("Método '" + nome + "' não existe em " + isto.nomeClasseDoObjeto(valorObjeto) + ".")
+        retorna nulo
+    }
+
+    // super(...) no construtor ou super.metodo(...) em um método.
+    chamarSuper(no: Construto, args: qualquer[]): dicionário {
+        se nao isto.pilha.existe("__classeDoMetodo") {
+            falhar("'super' usado fora de um método de classe.")
+        }
+        var valorIsto: dicionário = isto.pilha.obterValorVariavel("isto")
+        var classeDoMetodo: dicionário = isto.pilha.obterValorVariavel("__classeDoMetodo")
+        var conteudo: ValorClasse = isto.comoClasse(classeDoMetodo)
+        se nao conteudo.temSuperclasse() {
+            falhar("'super' usado na classe " + conteudo.nome + ", que não tem superclasse.")
+        }
+        var nomeMetodo: texto = no.nomeMembro
+        se nomeMetodo == "" { nomeMetodo = "construtor" }
+        var busca: dicionário = isto.procurarMetodo(conteudo.superclasse, nomeMetodo)
+        se nao isto.encontrou(busca) {
+            se nomeMetodo == "construtor" { retorna isto.criarNulo() }
+            falhar("Método '" + nomeMetodo + "' não existe na superclasse de " + conteudo.nome + ".")
+        }
+        retorna isto.chamarFuncaoComVinculo(busca["metodo"], args, valorIsto, busca["classe"])
+    }
+
+    executarDeclaracaoClasse(declaracao: Declaracao): qualquer {
+        var superclasse: dicionário = isto.criarNulo()
+        se declaracao.classeSuperclasse != "" {
+            superclasse = isto.pilha.obterValorVariavel(declaracao.classeSuperclasse)
+            se isto.tipoDe(superclasse) != "classe" {
+                falhar("'" + declaracao.classeSuperclasse + "' não é uma classe.")
+            }
+        }
+        var conteudo: ValorClasse = ValorClasse(declaracao.classeNome.lexema, superclasse, declaracao.classeCampos, isto.novoIdentificador())
+        var i: inteiro = 0
+        enquanto i < declaracao.classeMetodos.tamanho() {
+            var metodo: Declaracao = declaracao.classeMetodos[i]
+            conteudo.definirMetodo(metodo.funcaoNome.lexema, isto.criarValorFuncao(metodo))
+            i = i + 1
+        }
+        conteudo.ehAbstrata = declaracao.classeAbstrata
+        conteudo.ehEstrangeira = declaracao.classeEstrangeira
+        conteudo.abstratos = declaracao.classeAbstratos
+
+        var m: inteiro = 0
+        enquanto m < declaracao.classeMesclas.tamanho() {
+            var nomeMescla: texto = declaracao.classeMesclas[m]
+            var valorMescla: dicionário = isto.pilha.obterValorVariavel(nomeMescla)
+            se isto.tipoDe(valorMescla) != "classe" {
+                falhar("'" + nomeMescla + "' não é uma classe para 'mescla'.")
+            }
+            conteudo.mesclas.adicionar(valorMescla)
+            // Propriedades da classe mesclada também valem para as instâncias.
+            var camposMescla: texto[] = isto.comoClasse(valorMescla).campos
+            var c: inteiro = 0
+            enquanto c < camposMescla.tamanho() {
+                var campoMescla: texto = camposMescla[c]
+                se nao conteudo.campos.inclui(campoMescla) { conteudo.campos.adicionar(campoMescla) }
+                c = c + 1
+            }
+            m = m + 1
+        }
+
+        var valorClasse: dicionário = isto.criarValor("classe", conteudo)
+
+        // Uma classe concreta precisa implementar os métodos abstratos das superclasses.
+        se nao conteudo.ehAbstrata e nao conteudo.ehEstrangeira {
+            var ancestral: dicionário = conteudo.superclasse
+            var limite: inteiro = 1000
+            enquanto isto.tipoDe(ancestral) == "classe" e limite > 0 {
+                var conteudoAncestral: ValorClasse = isto.comoClasse(ancestral)
+                var a: inteiro = 0
+                enquanto a < conteudoAncestral.abstratos.tamanho() {
+                    var nomeAbstrato: texto = conteudoAncestral.abstratos[a]
+                    se nao isto.encontrou(isto.procurarMetodo(valorClasse, nomeAbstrato)) {
+                        falhar("Classe '" + conteudo.nome + "' não implementa o método abstrato '" + nomeAbstrato + "' da classe '" + conteudoAncestral.nome + "'.")
+                    }
+                    a = a + 1
+                }
+                ancestral = conteudoAncestral.superclasse
+                limite = limite - 1
+            }
+        }
+
+        // Interfaces: cada método exigido precisa existir na classe (ou herdado/mesclado).
+        var n: inteiro = 0
+        enquanto n < declaracao.classeInterfaces.tamanho() {
+            var nomeInterface: texto = declaracao.classeInterfaces[n]
+            var valorInterface: dicionário = isto.pilha.obterValorVariavel(nomeInterface)
+            se isto.tipoDe(valorInterface) != "interface" {
+                falhar("'" + nomeInterface + "' não é uma interface.")
+            }
+            var conteudoInterface: ValorClasse = isto.comoClasse(valorInterface)
+            var e1: inteiro = 0
+            enquanto e1 < conteudoInterface.abstratos.tamanho() {
+                var exigido: texto = conteudoInterface.abstratos[e1]
+                se nao isto.encontrou(isto.procurarMetodo(valorClasse, exigido)) {
+                    falhar("Classe '" + conteudo.nome + "' não implementa o método '" + exigido + "' exigido pela interface '" + nomeInterface + "'.")
+                }
+                e1 = e1 + 1
+            }
+            conteudo.interfaces.adicionar(nomeInterface)
+            var h: inteiro = 0
+            enquanto h < conteudoInterface.interfaces.tamanho() {
+                var herdada: texto = conteudoInterface.interfaces[h]
+                conteudo.interfaces.adicionar(herdada)
+                h = h + 1
+            }
+            n = n + 1
+        }
+
+        isto.pilha.definirVariavel(declaracao.classeNome.lexema, valorClasse)
+        retorna nulo
+    }
+
+    // interface: lista de métodos exigidos (inclusive os das interfaces herdadas).
+    executarDeclaracaoInterface(declaracao: Declaracao): qualquer {
+        var conteudo: ValorClasse = ValorClasse(declaracao.classeNome.lexema, isto.criarNulo(), declaracao.classeCampos, isto.novoIdentificador())
+        var exigidos: texto[] = []
+        var i: inteiro = 0
+        enquanto i < declaracao.classeAbstratos.tamanho() {
+            var exigido: texto = declaracao.classeAbstratos[i]
+            exigidos.adicionar(exigido)
+            i = i + 1
+        }
+        var j: inteiro = 0
+        enquanto j < declaracao.classeInterfaces.tamanho() {
+            var nomeHerdada: texto = declaracao.classeInterfaces[j]
+            var valorHerdada: dicionário = isto.pilha.obterValorVariavel(nomeHerdada)
+            se isto.tipoDe(valorHerdada) != "interface" {
+                falhar("'" + nomeHerdada + "' não é uma interface.")
+            }
+            var herdada: ValorClasse = isto.comoClasse(valorHerdada)
+            var k: inteiro = 0
+            enquanto k < herdada.abstratos.tamanho() {
+                var exigidoHerdado: texto = herdada.abstratos[k]
+                se nao exigidos.inclui(exigidoHerdado) { exigidos.adicionar(exigidoHerdado) }
+                k = k + 1
+            }
+            conteudo.interfaces.adicionar(nomeHerdada)
+            j = j + 1
+        }
+        conteudo.abstratos = exigidos
+        isto.pilha.definirVariavel(declaracao.classeNome.lexema, isto.criarValor("interface", conteudo))
+        retorna nulo
+    }
+
+    // objeto.eInstanciaDe(Classe ou Interface): pela cadeia de superclasses (não por `mescla`).
+    verificarInstancia(classeObjeto: dicionário, alvo: dicionário): lógico {
+        var tipoAlvo: texto = isto.tipoDe(alvo)
+        se tipoAlvo != "classe" e tipoAlvo != "interface" {
+            falhar("'eInstanciaDe' espera uma classe ou interface.")
+        }
+        var conteudoAlvo: ValorClasse = isto.comoClasse(alvo)
+        var atual: dicionário = classeObjeto
+        var limite: inteiro = 1000
+        enquanto isto.tipoDe(atual) == "classe" e limite > 0 {
+            var conteudo: ValorClasse = isto.comoClasse(atual)
+            se tipoAlvo == "classe" e conteudo.identificador == conteudoAlvo.identificador { retorna verdadeiro }
+            se tipoAlvo == "interface" e conteudo.interfaces.inclui(conteudoAlvo.nome) { retorna verdadeiro }
+            atual = conteudo.superclasse
+            limite = limite - 1
+        }
+        retorna falso
+    }
+
+    // ── extensão de Tipo { métodos } ──
+
+    // Chave da extensão: tipos embutidos pelo nome interno (numero, texto, logico, vetor,
+    // dicionario, tupla); classes pelo nome.
+    chaveExtensao(nomeTipo: texto): texto {
+        se nomeTipo == "número" ou nomeTipo == "numero" ou nomeTipo == "inteiro" ou nomeTipo == "real" { retorna "numero" }
+        se nomeTipo == "lógico" ou nomeTipo == "logico" { retorna "logico" }
+        se nomeTipo == "dicionário" ou nomeTipo == "dicionario" { retorna "dicionario" }
+        retorna nomeTipo
+    }
+
+    executarDeclaracaoExtensao(declaracao: Declaracao): qualquer {
+        var chave: texto = isto.chaveExtensao(declaracao.extensaoTipo)
+        se nao isto.extensoes.contem(chave) {
+            var camposExtensao: texto[] = []
+            var novaExtensao: ValorClasse = ValorClasse("extensão de " + declaracao.extensaoTipo, isto.criarNulo(), camposExtensao, isto.novoIdentificador())
+            isto.extensoes[chave] = isto.criarValor("classe", novaExtensao)
+        }
+        var valorExtensao: dicionário = isto.extensoes[chave]
+        var conteudo: ValorClasse = isto.comoClasse(valorExtensao)
+        var i: inteiro = 0
+        enquanto i < declaracao.classeMetodos.tamanho() {
+            var metodo: Declaracao = declaracao.classeMetodos[i]
+            conteudo.definirMetodo(metodo.funcaoNome.lexema, isto.criarValorFuncao(metodo))
+            i = i + 1
+        }
+        retorna nulo
+    }
+
+    procurarExtensao(chaveTipo: texto, nome: texto): dicionário {
+        se isto.extensoes.contem(chaveTipo) {
+            var valorExtensao: dicionário = isto.extensoes[chaveTipo]
+            retorna isto.procurarMetodo(valorExtensao, nome)
+        }
+        var naoAchado: dicionário = {}
+        naoAchado["encontrado"] = "n"
+        retorna naoAchado
+    }
+
+    // asserção condicao [, mensagem]
+    executarComandoAssercao(declaracao: Declaracao): qualquer {
+        se isto.eVerdadeiro(isto.avaliar(declaracao.condicaoSe)) { retorna nulo }
+        var mensagem: texto = "A asserção falhou."
+        se declaracao.valorFalhar != nulo {
+            mensagem = isto.paraTextoExibicao(isto.avaliar(declaracao.valorFalhar))
+        }
+        isto.excecaoPendente = isto.criarExcecao(mensagem)
+        falhar(mensagem)
+        retorna nulo
+    }
+
+    // ── tente / pegue / finalmente / falhar ──
+
+    // `falhar valor`: objetos são lançados como estão; outros valores viram uma Excecao com
+    // o valor como mensagem. O valor fica em `excecaoPendente` e o erro do hospedeiro leva
+    // a mensagem (é o que aparece se ninguém o capturar).
+    executarComandoFalhar(declaracao: Declaracao): qualquer {
+        var valor: dicionário = isto.avaliar(declaracao.valorFalhar)
+        var mensagem: texto = ""
+        se isto.tipoDe(valor) == "objeto" {
+            isto.excecaoPendente = valor
+            var objeto: ValorObjeto = isto.comoObjeto(valor)
+            se objeto.temCampo("mensagem") {
+                mensagem = isto.paraTextoExibicao(objeto.obterCampo("mensagem"))
+            } senao {
+                mensagem = isto.nomeClasseDoObjeto(valor)
+            }
+        } senao {
+            mensagem = isto.paraTextoExibicao(valor)
+            isto.excecaoPendente = isto.criarExcecao(mensagem)
+        }
+        falhar(mensagem)
+        retorna nulo
+    }
+
+    // Erro capturado: o valor de `falhar`, ou uma Excecao com a mensagem de um erro de
+    // execução do interpretador.
+    tomarExcecao(mensagem: texto): dicionário {
+        se isto.tipoDe(isto.excecaoPendente) == "objeto" {
+            var pendente: dicionário = isto.excecaoPendente
+            isto.excecaoPendente = isto.criarNulo()
+            retorna pendente
+        }
+        retorna isto.criarExcecao(mensagem)
+    }
+
+    executarComandoTente(declaracao: Declaracao): qualquer {
+        var pilhaAnterior: PilhaEscoposExecucao = isto.pilha
+        var arquivoAnterior: texto = isto.arquivoAtual
+        var diretorioAnterior: texto = isto.diretorioAtual
+        var resultado: qualquer = nulo
+        var falhou: lógico = falso
+        var mensagemFalha: texto = ""
+
+        tente {
+            resultado = isto.executar(declaracao.tenteCorpo)
+        } pegue (erroTente) {
+            falhou = verdadeiro
+            mensagemFalha = erroTente.mensagem
+        }
+
+        se falhou {
+            // O erro pode ter vindo de dentro de funções e módulos: volta ao estado do `tente`.
+            isto.pilha = pilhaAnterior
+            isto.arquivoAtual = arquivoAnterior
+            isto.diretorioAtual = diretorioAnterior
+            var erroCapturado: dicionário = isto.tomarExcecao(mensagemFalha)
+
+            var clausula: Declaracao = nulo
+            var indiceClausula: inteiro = 0
+            enquanto clausula == nulo e indiceClausula < declaracao.pegueClausulas.tamanho() {
+                var candidata: Declaracao = declaracao.pegueClausulas[indiceClausula]
+                se isto.erroCorresponde(erroCapturado, candidata.pegueTipo) { clausula = candidata }
+                indiceClausula = indiceClausula + 1
+            }
+
+            se clausula != nulo {
+                falhou = falso
+                tente {
+                    var escopoPegue: EspacoMemoria = EspacoMemoria()
+                    isto.pilha.empilhar(escopoPegue)
+                    se clausula.pegueNome != "" {
+                        isto.pilha.definirVariavel(clausula.pegueNome, erroCapturado)
+                    }
+                    resultado = isto.executar(clausula.pegueCorpo)
+                    isto.pilha.removerUltimo()
+                } pegue (erroPegue) {
+                    falhou = verdadeiro
+                    mensagemFalha = erroPegue.mensagem
+                    isto.pilha = pilhaAnterior
+                    isto.arquivoAtual = arquivoAnterior
+                    isto.diretorioAtual = diretorioAnterior
+                }
+            } senao {
+                // Sem `pegue` que corresponda: o mesmo erro continua depois do `finalmente`.
+                isto.excecaoPendente = erroCapturado
+            }
+        }
+
+        se declaracao.finalmenteCorpo != nulo {
+            var resultadoFinalmente: qualquer = isto.executar(declaracao.finalmenteCorpo)
+            se isto.eControle(resultadoFinalmente) {
+                resultado = resultadoFinalmente
+            }
+        }
+
+        se falhou {
+            falhar(mensagemFalha)
+        }
+        retorna resultado
+    }
+
+    // ── Tuplas, operadores e formatação ──
+
+    criarTupla(elementos: dicionário[]): dicionário {
+        var conteudo: ValorVetor = ValorVetor(elementos, isto.novoIdentificador())
+        retorna isto.criarValor("tupla", conteudo)
+    }
+
+    // Vetor ou tupla: os dois guardam um ValorVetor.
+    eSequencia(v: dicionário): lógico {
+        var t: texto = isto.tipoDe(v)
+        retorna t == "vetor" ou t == "tupla"
+    }
+
+    // (1, a, [2]) no nível superior; ("a", 1) dentro de vetores e dicionários.
+    exibirTupla(v: dicionário, aspas: texto): texto {
+        var conteudo: ValorVetor = isto.comoVetor(v)
+        var resultado: texto = "("
+        var i: inteiro = 0
+        enquanto i < conteudo.tamanho() {
+            se i > 0 { resultado = resultado + ", " }
+            var elemento: dicionário = conteudo.obter(i)
+            se isto.tipoDe(elemento) == "texto" {
+                resultado = resultado + aspas + isto.comoTexto(elemento) + aspas
+            } senao {
+                resultado = resultado + isto.paraTextoExibicao(elemento)
+            }
+            i = i + 1
+        }
+        retorna resultado + ")"
+    }
+
+    // `x em colecao`: elemento de vetor/tupla, trecho de texto ou chave de dicionário.
+    pertence(elemento: dicionário, colecao: dicionário): lógico {
+        var t: texto = isto.tipoDe(colecao)
+        se isto.eSequencia(colecao) {
+            var conteudo: ValorVetor = isto.comoVetor(colecao)
+            var i: inteiro = 0
+            enquanto i < conteudo.tamanho() {
+                se isto.valoresIguais(conteudo.obter(i), elemento) { retorna verdadeiro }
+                i = i + 1
+            }
+            retorna falso
+        }
+        se t == "texto" {
+            var valorTexto: texto = isto.comoTexto(colecao)
+            se valorTexto.encontrar(isto.paraTextoExibicao(elemento), 0) >= 0 { retorna verdadeiro }
+            retorna falso
+        }
+        se t == "dicionario" {
+            retorna isto.comoDicionario(colecao).contem(isto.paraChave(elemento))
+        }
+        falhar("Operador 'em' não se aplica a valores do tipo " + isto.nomeTipo(colecao) + ".")
+        retorna falso
+    }
+
+    paraLongo(v: dicionário): longo {
+        var n: número = isto.paraNumero(v)
+        var l: longo = n
+        retorna l
+    }
+
+    // Maior inteiro <= n.
+    piso(n: número): número {
+        var truncado: longo = n
+        var resultado: número = truncado
+        se resultado > n { resultado = resultado - 1 }
+        retorna resultado
+    }
+
+    teto(n: número): número {
+        var resultado: número = isto.piso(n)
+        se resultado < n { resultado = resultado + 1 }
+        retorna resultado
+    }
+
+    // Arredonda para `casas` casas decimais (metade para longe de zero).
+    arredondarNumero(n: número, casas: inteiro): número {
+        var fator: número = 1
+        var i: inteiro = 0
+        enquanto i < casas {
+            fator = fator * 10
+            i = i + 1
+        }
+        se n < 0 { retorna -isto.arredondarNumero(-n, casas) }
+        retorna isto.piso(n * fator + 0.5) / fator
+    }
+
+    // Número com exatamente `casas` casas decimais.
+    formatarFixo(n: número, casas: inteiro): texto {
+        var sinal: texto = ""
+        var valor: número = n
+        se valor < 0 {
+            sinal = "-"
+            valor = -valor
+        }
+        var fator: número = 1
+        var i: inteiro = 0
+        enquanto i < casas {
+            fator = fator * 10
+            i = i + 1
+        }
+        var escalado: longo = isto.piso(valor * fator + 0.5)
+        var digitos: texto = texto(escalado)
+        enquanto digitos.tamanho() < casas + 1 {
+            digitos = "0" + digitos
+        }
+        se casas == 0 { retorna sinal + digitos }
+        var corte: inteiro = digitos.tamanho() - casas
+        retorna sinal + digitos.subtexto(0, corte) + "." + digitos.subtexto(corte, digitos.tamanho())
+    }
+
+    // "modelo" % valores: %s, %d, %i, %f, %.Nf e %%.
+    formatarTexto(modelo: texto, valores: dicionário): dicionário {
+        var argumentos: qualquer[] = []
+        se isto.eSequencia(valores) {
+            var conteudo: ValorVetor = isto.comoVetor(valores)
+            var j: inteiro = 0
+            enquanto j < conteudo.tamanho() {
+                argumentos.adicionar(conteudo.obter(j))
+                j = j + 1
+            }
+        } senao {
+            argumentos.adicionar(valores)
+        }
+        var resultado: texto = ""
+        var proximo: inteiro = 0
+        var i: inteiro = 0
+        enquanto i < modelo.tamanho() {
+            var caractere: texto = modelo[i]
+            se caractere != "%" ou i + 1 >= modelo.tamanho() {
+                resultado = resultado + caractere
+                i = i + 1
+            } senao {
+                var especificador: texto = modelo[i + 1]
+                var casas: inteiro = 6
+                var avanco: inteiro = 2
+                se especificador == "." e i + 3 < modelo.tamanho() + 1 {
+                    var fim: inteiro = i + 2
+                    enquanto fim < modelo.tamanho() e modelo[fim] >= "0" e modelo[fim] <= "9" {
+                        fim = fim + 1
+                    }
+                    se fim < modelo.tamanho() e fim > i + 2 {
+                        var casasNumero: número = numero(modelo.subtexto(i + 2, fim))
+                        casas = casasNumero
+                        especificador = modelo[fim]
+                        avanco = fim - i + 1
+                    }
+                }
+                se especificador == "%" {
+                    resultado = resultado + "%"
+                } senao se especificador == "s" ou especificador == "d" ou especificador == "i" ou especificador == "f" {
+                    se proximo >= argumentos.tamanho() {
+                        falhar("Faltam valores para formatar o texto '" + modelo + "'.")
+                    }
+                    var argumento: dicionário = argumentos[proximo]
+                    proximo = proximo + 1
+                    se especificador == "s" {
+                        resultado = resultado + isto.paraTextoExibicao(argumento)
+                    } senao se especificador == "f" {
+                        resultado = resultado + isto.formatarFixo(isto.paraNumero(argumento), casas)
+                    } senao {
+                        var inteiroArgumento: longo = isto.paraNumero(argumento)
+                        resultado = resultado + texto(inteiroArgumento)
+                    }
+                } senao {
+                    resultado = resultado + "%" + especificador
+                }
+                i = i + avanco
+            }
+        }
+        retorna isto.criarValor("texto", resultado)
+    }
+
+    // Operadores de bits sobre inteiros.
+    avaliarBits(tipoOp: texto, esq: dicionário, dir: dicionário): dicionário {
+        var a: longo = isto.paraLongo(esq)
+        var b: longo = isto.paraLongo(dir)
+        var r: longo = 0
+        se tipoOp == "BIT_AND" { r = a & b }
+        se tipoOp == "BIT_OR" { r = a | b }
+        se tipoOp == "BIT_XOR" { r = a ^ b }
+        se tipoOp == "MENOR_MENOR" { r = a << b }
+        se tipoOp == "MAIOR_MAIOR" { r = a >> b }
+        var resultado: número = r
+        retorna isto.criarValor("numero", resultado)
+    }
+
+    // ── escolha / fazer ──
+
+    executarComandoEscolha(declaracao: Declaracao): qualquer {
+        var valor: dicionário = isto.avaliar(declaracao.escolhaValor)
+        var indicePadrao: inteiro = -1
+        var i: inteiro = 0
+        enquanto i < declaracao.escolhaCasos.tamanho() {
+            var casoAtual: Declaracao = declaracao.escolhaCasos[i]
+            se casoAtual.casoPadrao { indicePadrao = i }
+            var j: inteiro = 0
+            enquanto j < casoAtual.casoValores.tamanho() {
+                se isto.valoresIguais(valor, isto.avaliar(casoAtual.casoValores[j])) {
+                    retorna isto.executar(casoAtual.casoCorpo)
+                }
+                j = j + 1
+            }
+            i = i + 1
+        }
+        se indicePadrao >= 0 {
+            var casoPadrao: Declaracao = declaracao.escolhaCasos[indicePadrao]
+            retorna isto.executar(casoPadrao.casoCorpo)
+        }
+        retorna nulo
+    }
+
+    executarComandoFazer(declaracao: Declaracao): qualquer {
+        var repetir: lógico = verdadeiro
+        enquanto repetir {
+            var resultado: qualquer = isto.executar(declaracao.corpoEnquanto)
+            var decisao: texto = isto.decisaoLaco(resultado)
+            se decisao == "retornar" { retorna resultado }
+            se decisao == "parar" { retorna nulo }
+            repetir = isto.eVerdadeiro(isto.avaliar(declaracao.condicaoEnquanto))
+        }
+        retorna nulo
+    }
+
+    // `pegue (erro: Tipo)`: o erro é instância de Tipo ou de uma subclasse. Excecao (erros
+    // de execução e `falhar` com valores que não são objetos) corresponde a "Excecao".
+    erroCorresponde(erro: dicionário, nomeTipo: texto): lógico {
+        se nomeTipo == "" ou nomeTipo == "qualquer" ou nomeTipo == "objeto" { retorna verdadeiro }
+        se isto.tipoDe(erro) != "objeto" { retorna falso }
+        var classeAtual: dicionário = isto.comoObjeto(erro).classeObjeto
+        var limite: inteiro = 1000
+        enquanto isto.tipoDe(classeAtual) == "classe" e limite > 0 {
+            var conteudo: ValorClasse = isto.comoClasse(classeAtual)
+            se conteudo.nome == nomeTipo { retorna verdadeiro }
+            classeAtual = conteudo.superclasse
+            limite = limite - 1
+        }
+        retorna falso
+    }
+
+    // ── Funções embutidas que recebem funções e coleções ──
+
+    sequenciaDe(nomeFuncao: texto, v: dicionário): ValorVetor {
+        se nao isto.eSequencia(v) {
+            falhar("'" + nomeFuncao + "' espera um vetor, não " + isto.nomeTipo(v) + ".")
+        }
+        retorna isto.comoVetor(v)
+    }
+
+    chamarComUm(funcaoChamada: dicionário, argumento: dicionário): dicionário {
+        var argumentos: qualquer[] = []
+        argumentos.adicionar(argumento)
+        retorna isto.chamarValor(funcaoChamada, argumentos, "")
+    }
+
+    chamarComDois(funcaoChamada: dicionário, primeiro: dicionário, segundo: dicionário): dicionário {
+        var argumentos: qualquer[] = []
+        argumentos.adicionar(primeiro)
+        argumentos.adicionar(segundo)
+        retorna isto.chamarValor(funcaoChamada, argumentos, "")
+    }
+
+    // Comparação para ordenar: com função (negativo, zero ou positivo) ou na ordem natural.
+    compararParaOrdenar(a: dicionário, b: dicionário, comparador: dicionário): número {
+        se isto.tipoDe(comparador) != "nulo" {
+            retorna isto.paraNumero(isto.chamarComDois(comparador, a, b))
+        }
+        se isto.tipoDe(a) == "texto" e isto.tipoDe(b) == "texto" {
+            var textoA: texto = isto.comoTexto(a)
+            var textoB: texto = isto.comoTexto(b)
+            se textoA < textoB { retorna -1 }
+            se textoA > textoB { retorna 1 }
+            retorna 0
+        }
+        retorna isto.paraNumero(a) - isto.paraNumero(b)
+    }
+
+    // Ordenação estável (por inserção) dos elementos, no próprio vetor.
+    ordenarElementos(conteudo: ValorVetor, comparador: dicionário) {
+        var i: inteiro = 1
+        enquanto i < conteudo.tamanho() {
+            var atual: dicionário = conteudo.obter(i)
+            var j: inteiro = i - 1
+            enquanto j >= 0 e isto.compararParaOrdenar(conteudo.obter(j), atual, comparador) > 0 {
+                conteudo.definir(j + 1, conteudo.obter(j))
+                j = j - 1
+            }
+            conteudo.definir(j + 1, atual)
+            i = i + 1
+        }
+    }
+
+    // Cópia rasa como vetor ou tupla. (Um método com retorno `dicionário[]` gera IR inválido
+    // no delegua-llvm; por isso a cópia já sai como valor.)
+    copiarComo(conteudo: ValorVetor, tipoCopia: texto): dicionário {
+        var copia: dicionário[] = []
+        var i: inteiro = 0
+        enquanto i < conteudo.tamanho() {
+            copia.adicionar(conteudo.obter(i))
+            i = i + 1
+        }
+        se tipoCopia == "tupla" { retorna isto.criarTupla(copia) }
+        retorna isto.criarVetor(copia)
+    }
+
+    clonarValor(v: dicionário): dicionário {
+        var t: texto = isto.tipoDe(v)
+        se isto.eSequencia(v) {
+            var conteudo: ValorVetor = isto.comoVetor(v)
+            var copia: dicionário[] = []
+            var i: inteiro = 0
+            enquanto i < conteudo.tamanho() {
+                copia.adicionar(isto.clonarValor(conteudo.obter(i)))
+                i = i + 1
+            }
+            se t == "tupla" { retorna isto.criarTupla(copia) }
+            retorna isto.criarVetor(copia)
+        }
+        se t == "dicionario" {
+            var origem: ValorDicionario = isto.comoDicionario(v)
+            var destino: ValorDicionario = ValorDicionario(isto.novoIdentificador())
+            var chaves: texto[] = origem.chaves()
+            var k: inteiro = 0
+            enquanto k < chaves.tamanho() {
+                var chave: texto = chaves[k]
+                destino.definir(chave, isto.clonarValor(origem.obter(chave)))
+                k = k + 1
+            }
+            retorna isto.criarValor("dicionario", destino)
+        }
+        retorna v
+    }
+
+    // Funções globais de coleções (também usadas pelos métodos de vetor equivalentes).
+    chamarNativoColecao(nome: texto, args: qualquer[]): dicionário {
+        isto.exigirArgumentos(nome, args, 1)
+        var alvo: dicionário = args[0]
+
+        se nome == "clonar" { retorna isto.clonarValor(alvo) }
+        se nome == "tupla" { retorna isto.copiarComo(isto.sequenciaDe(nome, alvo), "tupla") }
+        se nome == "vetor" { retorna isto.copiarComo(isto.sequenciaDe(nome, alvo), "vetor") }
+
+        var conteudo: ValorVetor = isto.sequenciaDe(nome, alvo)
+        se nome == "somar" {
+            var soma: número = 0
+            var s: inteiro = 0
+            enquanto s < conteudo.tamanho() {
+                soma = soma + isto.paraNumero(conteudo.obter(s))
+                s = s + 1
+            }
+            retorna isto.criarValor("numero", soma)
+        }
+        se nome == "maximo" ou nome == "minimo" {
+            se conteudo.tamanho() == 0 { retorna isto.criarNulo() }
+            var melhor: dicionário = conteudo.obter(0)
+            var m: inteiro = 1
+            var semComparador: dicionário = isto.criarNulo()
+            enquanto m < conteudo.tamanho() {
+                var candidato: dicionário = conteudo.obter(m)
+                var diferenca: número = isto.compararParaOrdenar(candidato, melhor, semComparador)
+                se (nome == "maximo" e diferenca > 0) ou (nome == "minimo" e diferenca < 0) {
+                    melhor = candidato
+                }
+                m = m + 1
+            }
+            retorna melhor
+        }
+        se nome == "ordenar" {
+            var vetorOrdenado: dicionário = isto.copiarComo(conteudo, "vetor")
+            var comparadorOrdenar: dicionário = isto.criarNulo()
+            se args.tamanho() > 1 { comparadorOrdenar = args[1] }
+            isto.ordenarElementos(isto.comoVetor(vetorOrdenado), comparadorOrdenar)
+            retorna vetorOrdenado
+        }
+        se nome == "incluido" {
+            isto.exigirArgumentos(nome, args, 2)
+            retorna isto.criarValor("logico", isto.pertence(args[1], alvo))
+        }
+        se nome == "reduzir" {
+            isto.exigirArgumentos(nome, args, 2)
+            var inicio: inteiro = 0
+            var acumulado: dicionário = isto.criarNulo()
+            se args.tamanho() > 2 {
+                acumulado = args[2]
+            } senao {
+                se conteudo.tamanho() == 0 { falhar("'reduzir' de vetor vazio sem valor inicial.") }
+                acumulado = conteudo.obter(0)
+                inicio = 1
+            }
+            var r: inteiro = inicio
+            enquanto r < conteudo.tamanho() {
+                acumulado = isto.chamarComDois(args[1], acumulado, conteudo.obter(r))
+                r = r + 1
+            }
+            retorna acumulado
+        }
+
+        // As demais recebem uma função como segundo argumento.
+        isto.exigirArgumentos(nome, args, 2)
+        var funcaoArgumento: dicionário = args[1]
+        se nome == "mapear" {
+            var mapeados: dicionário[] = []
+            var a: inteiro = 0
+            enquanto a < conteudo.tamanho() {
+                mapeados.adicionar(isto.chamarComUm(funcaoArgumento, conteudo.obter(a)))
+                a = a + 1
+            }
+            retorna isto.criarVetor(mapeados)
+        }
+        se nome == "filtrarPor" {
+            var filtrados: dicionário[] = []
+            var b: inteiro = 0
+            enquanto b < conteudo.tamanho() {
+                var elementoFiltro: dicionário = conteudo.obter(b)
+                se isto.eVerdadeiro(isto.chamarComUm(funcaoArgumento, elementoFiltro)) { filtrados.adicionar(elementoFiltro) }
+                b = b + 1
+            }
+            retorna isto.criarVetor(filtrados)
+        }
+        se nome == "paraCada" {
+            var c: inteiro = 0
+            enquanto c < conteudo.tamanho() {
+                isto.chamarComUm(funcaoArgumento, conteudo.obter(c))
+                c = c + 1
+            }
+            retorna isto.criarNulo()
+        }
+        se nome == "algum" ou nome == "todos" ou nome == "todosEmCondicao" {
+            var d: inteiro = 0
+            enquanto d < conteudo.tamanho() {
+                var atende: lógico = isto.eVerdadeiro(isto.chamarComUm(funcaoArgumento, conteudo.obter(d)))
+                se nome == "algum" e atende { retorna isto.criarValor("logico", verdadeiro) }
+                se nome != "algum" e nao atende { retorna isto.criarValor("logico", falso) }
+                d = d + 1
+            }
+            retorna isto.criarValor("logico", nome != "algum")
+        }
+        se nome == "encontrar" ou nome == "primeiroEmCondicao" ou nome == "encontrarIndice" {
+            var e1: inteiro = 0
+            enquanto e1 < conteudo.tamanho() {
+                se isto.eVerdadeiro(isto.chamarComUm(funcaoArgumento, conteudo.obter(e1))) {
+                    se nome == "encontrarIndice" {
+                        var indiceAchado: número = e1
+                        retorna isto.criarValor("numero", indiceAchado)
+                    }
+                    retorna conteudo.obter(e1)
+                }
+                e1 = e1 + 1
+            }
+            se nome == "encontrarIndice" { retorna isto.criarValor("numero", -1) }
+            retorna isto.criarNulo()
+        }
+        se nome == "encontrarUltimo" ou nome == "encontrarUltimoIndice" {
+            var u: inteiro = conteudo.tamanho() - 1
+            enquanto u >= 0 {
+                se isto.eVerdadeiro(isto.chamarComUm(funcaoArgumento, conteudo.obter(u))) {
+                    se nome == "encontrarUltimoIndice" {
+                        var ultimoAchado: número = u
+                        retorna isto.criarValor("numero", ultimoAchado)
+                    }
+                    retorna conteudo.obter(u)
+                }
+                u = u - 1
+            }
+            se nome == "encontrarUltimoIndice" { retorna isto.criarValor("numero", -1) }
+            retorna isto.criarNulo()
+        }
+        falhar("Função nativa não encontrada: " + nome)
+        retorna nulo
+    }
+
+    eNativaDeColecao(nome: texto): lógico {
+        var nomes: texto[] = ["clonar", "tupla", "vetor", "somar", "maximo", "minimo", "ordenar", "incluido", "reduzir", "mapear", "filtrarPor", "paraCada", "algum", "todos", "todosEmCondicao", "encontrar", "primeiroEmCondicao", "encontrarIndice", "encontrarUltimo", "encontrarUltimoIndice"]
+        se nomes.inclui(nome) { retorna verdadeiro }
+        retorna falso
+    }
+
+    // ── Métodos novos de vetor, número e dicionário ──
+
+    chamarMetodoVetorExtra(objeto: dicionário, nomeMetodo: texto, args: qualquer[]): dicionário {
+        var conteudo: ValorVetor = isto.comoVetor(objeto)
+        se nomeMetodo == "inverter" {
+            var esquerda: inteiro = 0
+            var direita: inteiro = conteudo.tamanho() - 1
+            enquanto esquerda < direita {
+                var temporario: dicionário = conteudo.obter(esquerda)
+                conteudo.definir(esquerda, conteudo.obter(direita))
+                conteudo.definir(direita, temporario)
+                esquerda = esquerda + 1
+                direita = direita - 1
+            }
+            retorna objeto
+        }
+        se nomeMetodo == "ordenar" {
+            var comparador: dicionário = isto.criarNulo()
+            se args.tamanho() > 0 { comparador = args[0] }
+            isto.ordenarElementos(conteudo, comparador)
+            retorna objeto
+        }
+        se nomeMetodo == "concatenar" {
+            var juntos: dicionário[] = []
+            var c0: inteiro = 0
+            enquanto c0 < conteudo.tamanho() {
+                juntos.adicionar(conteudo.obter(c0))
+                c0 = c0 + 1
+            }
+            var i: inteiro = 0
+            enquanto i < args.tamanho() {
+                var outro: dicionário = args[i]
+                se isto.eSequencia(outro) {
+                    var conteudoOutro: ValorVetor = isto.comoVetor(outro)
+                    var j: inteiro = 0
+                    enquanto j < conteudoOutro.tamanho() {
+                        juntos.adicionar(conteudoOutro.obter(j))
+                        j = j + 1
+                    }
+                } senao {
+                    juntos.adicionar(outro)
+                }
+                i = i + 1
+            }
+            retorna isto.criarVetor(juntos)
+        }
+        // encaixar(inicio, quantidade, ...novos): remove e devolve `quantidade` elementos a
+        // partir de `inicio` e coloca `novos` no lugar (como splice).
+        se nomeMetodo == "encaixar" {
+            isto.exigirArgumentos(nomeMetodo, args, 1)
+            var tamanhoAtual: inteiro = conteudo.tamanho()
+            var inicio: inteiro = isto.limitarIndice(isto.paraInteiro(args[0]), tamanhoAtual)
+            var quantidade: inteiro = tamanhoAtual - inicio
+            se args.tamanho() > 1 { quantidade = isto.paraInteiro(args[1]) }
+            se quantidade < 0 { quantidade = 0 }
+            se inicio + quantidade > tamanhoAtual { quantidade = tamanhoAtual - inicio }
+            var removidos: dicionário[] = []
+            var novos: dicionário[] = []
+            var k: inteiro = 0
+            enquanto k < inicio {
+                novos.adicionar(conteudo.obter(k))
+                k = k + 1
+            }
+            enquanto k < inicio + quantidade {
+                removidos.adicionar(conteudo.obter(k))
+                k = k + 1
+            }
+            var a: inteiro = 2
+            enquanto a < args.tamanho() {
+                var inserido: dicionário = args[a]
+                novos.adicionar(inserido)
+                a = a + 1
+            }
+            enquanto k < tamanhoAtual {
+                novos.adicionar(conteudo.obter(k))
+                k = k + 1
+            }
+            conteudo.elementos = novos
+            retorna isto.criarVetor(removidos)
+        }
+        // remover(valor): tira a primeira ocorrência e devolve o próprio vetor.
+        se nomeMetodo == "remover" {
+            isto.exigirArgumentos(nomeMetodo, args, 1)
+            var procurado: dicionário = args[0]
+            var restantes: dicionário[] = []
+            var removeu: lógico = falso
+            var r: inteiro = 0
+            enquanto r < conteudo.tamanho() {
+                var elemento: dicionário = conteudo.obter(r)
+                se nao removeu e isto.valoresIguais(elemento, procurado) {
+                    removeu = verdadeiro
+                } senao {
+                    restantes.adicionar(elemento)
+                }
+                r = r + 1
+            }
+            conteudo.elementos = restantes
+            retorna objeto
+        }
+        se nomeMetodo == "paraTupla" { retorna isto.copiarComo(conteudo, "tupla") }
+        se nomeMetodo == "somar" ou nomeMetodo == "mapear" ou nomeMetodo == "filtrarPor" {
+            var argumentosNativa: qualquer[] = []
+            argumentosNativa.adicionar(objeto)
+            var p: inteiro = 0
+            enquanto p < args.tamanho() {
+                argumentosNativa.adicionar(args[p])
+                p = p + 1
+            }
+            retorna isto.chamarNativoColecao(nomeMetodo, argumentosNativa)
+        }
+        falhar("Método '" + nomeMetodo + "' não existe para vetor.")
+        retorna nulo
+    }
+
+    chamarMetodoNumero(objeto: dicionário, nomeMetodo: texto, args: qualquer[]): dicionário {
+        var n: número = isto.paraNumero(objeto)
+        se nomeMetodo == "absoluto" {
+            se n < 0 { retorna isto.criarValor("numero", -n) }
+            retorna objeto
+        }
+        se nomeMetodo == "arredondarParaBaixo" { retorna isto.criarValor("numero", isto.piso(n)) }
+        se nomeMetodo == "arredondarParaCima" { retorna isto.criarValor("numero", isto.teto(n)) }
+        falhar("Método '" + nomeMetodo + "' não existe para número.")
+        retorna nulo
+    }
+
+    // ── Módulos (importar) ──
+
+    // Arquivo principal: base dos caminhos relativos de `importar`.
+    definirArquivoPrincipal(caminho: texto) {
+        isto.arquivoAtual = caminho
+        isto.diretorioAtual = arquivos.diretorioPai(arquivos.caminhoAbsoluto(caminho))
+    }
+
+    comoModulo(v: dicionário): ValorModulo {
+        var conteudo: ValorModulo = v["valor"]
+        retorna conteudo
+    }
+
+    // Caminho mostrado em mensagens: relativo ao diretório de trabalho, quando possível.
+    caminhoExibicao(caminhoAbsoluto: texto): texto {
+        var base: texto = arquivos.diretorioAtual()
+        se base != "" e caminhoAbsoluto.tamanho() > base.tamanho() + 1 {
+            var prefixo: texto = caminhoAbsoluto.subtexto(0, base.tamanho())
+            var separador: texto = caminhoAbsoluto[base.tamanho()]
+            se prefixo == base e (separador == "/" ou separador == "\\") {
+                var relativo: texto = caminhoAbsoluto.subtexto(base.tamanho() + 1, caminhoAbsoluto.tamanho())
+                retorna relativo.substituir("\\", "/")
+            }
+        }
+        retorna caminhoAbsoluto
+    }
+
+    eCaminhoDeArquivo(caminho: texto): lógico {
+        se caminho.tamanho() == 0 { retorna falso }
+        var primeiro: texto = caminho[0]
+        se primeiro == "." ou primeiro == "/" ou primeiro == "\\" { retorna verdadeiro }
+        // Absoluto no Windows: "C:\..." ou "C:/...".
+        se caminho.tamanho() > 2 {
+            var segundo: texto = caminho[1]
+            var terceiro: texto = caminho[2]
+            se segundo == ":" e (terceiro == "/" ou terceiro == "\\") { retorna verdadeiro }
+        }
+        retorna falso
+    }
+
+    // Valor de "pontoDeEntrada" em um pacoteca.jsonc (leitura simples, sem um analisador JSONC).
+    pontoDeEntradaDoManifesto(conteudo: texto): texto {
+        var posicaoChave: inteiro = conteudo.encontrar("\"pontoDeEntrada\"", 0)
+        se posicaoChave < 0 { retorna "" }
+        var posicaoDoisPontos: inteiro = conteudo.encontrar(":", posicaoChave)
+        se posicaoDoisPontos < 0 { retorna "" }
+        var abertura: inteiro = conteudo.encontrar("\"", posicaoDoisPontos)
+        se abertura < 0 { retorna "" }
+        var fechamento: inteiro = conteudo.encontrar("\"", abertura + 1)
+        se fechamento < 0 { retorna "" }
+        retorna conteudo.subtexto(abertura + 1, fechamento)
+    }
+
+    // Pacote da Pacoteca: procura pacotes/<realização>/<nome>/pacoteca.jsonc subindo a
+    // partir do diretório atual. O deldel é compilado pelo delegua-llvm, então a realização
+    // `llvm` vem primeiro; pacotes só com `node` também servem, por serem Delégua puro.
+    resolverPacote(nome: texto): texto {
+        var realizacoes: texto[] = ["llvm", "node"]
+        var diretorio: texto = isto.diretorioAtual
+        var limite: inteiro = 64
+        enquanto diretorio != "" e limite > 0 {
+            var i: inteiro = 0
+            enquanto i < realizacoes.tamanho() {
+                var diretorioPacote: texto = arquivos.juntarCaminhos(arquivos.juntarCaminhos(arquivos.juntarCaminhos(diretorio, "pacotes"), realizacoes[i]), nome)
+                var manifesto: texto = arquivos.juntarCaminhos(diretorioPacote, "pacoteca.jsonc")
+                se arquivos.existe(manifesto) {
+                    var pontoDeEntrada: texto = isto.pontoDeEntradaDoManifesto(arquivos.lerTexto(manifesto))
+                    se pontoDeEntrada == "" {
+                        falhar("Pacote '" + nome + "' sem \"pontoDeEntrada\" em " + isto.caminhoExibicao(manifesto) + ".")
+                    }
+                    retorna arquivos.caminhoAbsoluto(arquivos.juntarCaminhos(diretorioPacote, pontoDeEntrada))
+                }
+                i = i + 1
+            }
+            var pai: texto = arquivos.diretorioPai(diretorio)
+            se pai == diretorio { retorna "" }
+            diretorio = pai
+            limite = limite - 1
+        }
+        retorna ""
+    }
+
+    // Caminho absoluto do arquivo de um módulo, ou "" se não houver.
+    resolverModulo(caminho: texto): texto {
+        se isto.eCaminhoDeArquivo(caminho) {
+            var candidato: texto = arquivos.caminhoAbsoluto(arquivos.juntarCaminhos(isto.diretorioAtual, caminho))
+            se arquivos.eArquivo(candidato) { retorna candidato }
+            var comExtensao: texto = candidato + ".delegua"
+            se arquivos.eArquivo(comExtensao) { retorna comExtensao }
+            retorna ""
+        }
+        retorna isto.resolverPacote(caminho)
+    }
+
+    eModuloNativo(nome: texto): lógico {
+        var nativos: texto[] = ["arquivos", "processo", "argumentos", "rede", "tempo", "criptografia", "matematica", "json", "csv", "http", "memoria", "estatistica", "fisica", "dados", "testes"]
+        se nativos.inclui(nome) { retorna verdadeiro }
+        retorna falso
+    }
+
+    // Módulo nativo (arquivos, processo...): um escopo com uma nativa "modulo.funcao" para
+    // cada função, mais os valores do módulo (ex.: argumentos.quantidade).
+    carregarModuloNativo(nome: texto): dicionário {
+        var chave: texto = "nativo:" + nome
+        se isto.modulos.contem(chave) {
+            var carregado: dicionário = isto.modulos[chave]
+            retorna carregado
+        }
+        var escopoModulo: EspacoMemoria = EspacoMemoria()
+        var pilhaModulo: PilhaEscoposExecucao = PilhaEscoposExecucao()
+        pilhaModulo.empilhar(escopoModulo)
+        var funcoes: texto[] = isto.nativos.funcoes(nome)
+        var i: inteiro = 0
+        enquanto i < funcoes.tamanho() {
+            var nomeFuncao: texto = funcoes[i]
+            pilhaModulo.definirVariavel(nomeFuncao, isto.criarValor("nativa", nome + "." + nomeFuncao))
+            i = i + 1
+        }
+        var constantes: texto[] = isto.nativos.nomesConstantes(nome)
+        var j: inteiro = 0
+        enquanto j < constantes.tamanho() {
+            var nomeConstante: texto = constantes[j]
+            pilhaModulo.definirVariavel(nomeConstante, isto.nativos.valorConstante(nome, nomeConstante))
+            j = j + 1
+        }
+        var conteudoModulo: ValorModulo = ValorModulo(nome, escopoModulo, isto.novoIdentificador())
+        var valorModulo: dicionário = isto.criarValor("modulo", conteudoModulo)
+        isto.modulos[chave] = valorModulo
+        retorna valorModulo
+    }
+
+    // Carrega (uma única vez por arquivo) e devolve o valor do módulo.
+    carregarModulo(caminho: texto): dicionário {
+        se nao isto.eCaminhoDeArquivo(caminho) e isto.nativos.eModulo(caminho) {
+            retorna isto.carregarModuloNativo(caminho)
+        }
+        var caminhoAbsoluto: texto = isto.resolverModulo(caminho)
+        se caminhoAbsoluto == "" {
+            se isto.eModuloNativo(caminho) {
+                falhar("Módulo nativo '" + caminho + "' ainda não suportado pelo deldel.")
+            }
+            falhar("Módulo não encontrado: '" + caminho + "'.")
+        }
+        se isto.modulos.contem(caminhoAbsoluto) {
+            var carregado: dicionário = isto.modulos[caminhoAbsoluto]
+            retorna carregado
+        }
+
+        var exibicao: texto = isto.caminhoExibicao(caminhoAbsoluto)
+        var codigo: texto = arquivos.lerTexto(caminhoAbsoluto)
+        var lexador: Lexador = Lexador()
+        var retornoLexador: RetornoLexador = lexador.mapear(codigo, 0)
+        se retornoLexador.erros.tamanho() > 0 {
+            var erroLexador: ErroLexador = retornoLexador.erros[0]
+            var linhaLexador: inteiro = erroLexador.linha
+            falhar("Erro léxico em " + exibicao + ":" + texto(linhaLexador) + ": " + erroLexador.mensagem)
+        }
+        var avaliador: AvaliadorSintatico = AvaliadorSintatico()
+        var retornoAvaliador: RetornoAvaliadorSintatico = avaliador.analisar(retornoLexador.simbolos)
+        se retornoAvaliador.errosDetalhados.tamanho() > 0 {
+            var erroSintatico: ErroAvaliadorSintatico = retornoAvaliador.errosDetalhados[0]
+            var linhaSintatico: inteiro = erroSintatico.simbolo.linha
+            falhar("Erro de sintaxe em " + exibicao + ":" + texto(linhaSintatico) + ": " + erroSintatico.mensagem)
+        }
+
+        // Registrado antes de executar, para que importações circulares recebam o
+        // módulo (ainda incompleto) em vez de entrar em laço.
+        var escopoModulo: EspacoMemoria = EspacoMemoria()
+        var conteudoModulo: ValorModulo = ValorModulo(caminhoAbsoluto, escopoModulo, isto.novoIdentificador())
+        var valorModulo: dicionário = isto.criarValor("modulo", conteudoModulo)
+        isto.modulos[caminhoAbsoluto] = valorModulo
+
+        var pilhaAnterior: PilhaEscoposExecucao = isto.pilha
+        var arquivoAnterior: texto = isto.arquivoAtual
+        var diretorioAnterior: texto = isto.diretorioAtual
+        var linhaAnterior: número = isto.linhaAtual
+
+        var pilhaModulo: PilhaEscoposExecucao = PilhaEscoposExecucao()
+        pilhaModulo.empilhar(isto.escopoNativas)
+        pilhaModulo.empilhar(escopoModulo)
+        isto.pilha = pilhaModulo
+        isto.arquivoAtual = exibicao
+        isto.diretorioAtual = arquivos.diretorioPai(caminhoAbsoluto)
+
+        isto.interpretar(retornoAvaliador.declaracoes)
+
+        isto.pilha = pilhaAnterior
+        isto.arquivoAtual = arquivoAnterior
+        isto.diretorioAtual = diretorioAnterior
+        isto.linhaAtual = linhaAnterior
+        retorna valorModulo
+    }
+
+    membroDeModulo(valorModulo: dicionário, nome: texto): dicionário {
+        var conteudo: ValorModulo = isto.comoModulo(valorModulo)
+        se nao conteudo.contem(nome) {
+            falhar("'" + nome + "' não é declarado em " + isto.caminhoExibicao(conteudo.caminho) + ".")
+        }
+        retorna conteudo.obter(nome)
+    }
+
+    executarDeclaracaoImportar(declaracao: Declaracao): qualquer {
+        var valorModulo: dicionário = isto.carregarModulo(declaracao.importarCaminho)
+        se declaracao.importarAlias != "" {
+            isto.pilha.definirVariavel(declaracao.importarAlias, valorModulo)
+            retorna nulo
+        }
+        var i: inteiro = 0
+        enquanto i < declaracao.importarNomes.tamanho() {
+            var nome: texto = declaracao.importarNomes[i]
+            isto.pilha.definirVariavel(nome, isto.membroDeModulo(valorModulo, nome))
+            i = i + 1
+        }
+        retorna nulo
+    }
+
+    // ── Declarações ──
 
     executar(declaracao: Declaracao): qualquer {
         se declaracao == nulo { retorna nulo }
+        se declaracao.linha > 0 { isto.linhaAtual = declaracao.linha }
         var t: texto = declaracao.noh
 
         se t == "ComandoExpressao" { retorna isto.avaliar(declaracao.expressaoComando) }
         se t == "ComandoBloco" { retorna isto.executarBloco(declaracao.blocoDeclaracoes) }
         se t == "DeclaracaoVariavel" { retorna isto.executarDeclaracaoVariavel(declaracao) }
+        se t == "DeclaracaoConstante" {
+            var valorConstante: dicionário = isto.avaliar(declaracao.variavelInicializador)
+            isto.pilha.definirConstante(declaracao.variavelNome.lexema, valorConstante)
+            retorna nulo
+        }
         se t == "DeclaracaoFuncao" { retorna isto.executarDeclaracaoFuncao(declaracao) }
+        se t == "DeclaracaoImportar" { retorna isto.executarDeclaracaoImportar(declaracao) }
+        se t == "DeclaracaoClasse" { retorna isto.executarDeclaracaoClasse(declaracao) }
+        se t == "DeclaracaoInterface" { retorna isto.executarDeclaracaoInterface(declaracao) }
+        se t == "DeclaracaoExtensao" { retorna isto.executarDeclaracaoExtensao(declaracao) }
+        se t == "ComandoAssercao" { retorna isto.executarComandoAssercao(declaracao) }
+        se t == "ComandoTente" { retorna isto.executarComandoTente(declaracao) }
+        se t == "ComandoEscolha" { retorna isto.executarComandoEscolha(declaracao) }
+        se t == "ComandoFazer" { retorna isto.executarComandoFazer(declaracao) }
+        se t == "ComandoFalhar" { retorna isto.executarComandoFalhar(declaracao) }
         se t == "ComandoSe" { retorna isto.executarComandoSe(declaracao) }
         se t == "ComandoEnquanto" { retorna isto.executarComandoEnquanto(declaracao) }
         se t == "ComandoRetornar" { retorna isto.executarComandoRetornar(declaracao) }
+        se t == "ComandoPara" { retorna isto.executarComandoPara(declaracao) }
+        se t == "ComandoParaCada" { retorna isto.executarComandoParaCada(declaracao) }
+        se t == "ComandoSustar" { retorna isto.criarControle("sustar", nulo) }
+        se t == "ComandoContinua" { retorna isto.criarControle("continuar", nulo) }
 
+        falhar("Declaração não suportada: " + t + ".")
         retorna nulo
     }
 
@@ -175,7 +2297,7 @@ classe Interpretador {
         var pararExecucao: lógico = falso
         enquanto i < declaracoes.tamanho() e nao pararExecucao {
             resultado = isto.executar(declaracoes[i])
-            se isto.eControleRetorno(resultado) {
+            se isto.eControle(resultado) {
                 pararExecucao = verdadeiro
             }
             i = i + 1
@@ -194,19 +2316,130 @@ classe Interpretador {
         retorna nulo
     }
 
+    // Resultado de uma volta de laço: "parar" (sustar), "retornar" (o sinal deve subir)
+    // ou "seguir" (inclusive depois de `continua`).
+    decisaoLaco(resultado: qualquer): texto {
+        var sinal: texto = isto.tipoControle(resultado)
+        se sinal == "sustar" { retorna "parar" }
+        se sinal == "retornar" { retorna "retornar" }
+        retorna "seguir"
+    }
+
     executarComandoEnquanto(declaracao: Declaracao): qualquer {
-        var resultado: qualquer = nulo
         enquanto isto.eVerdadeiro(isto.avaliar(declaracao.condicaoEnquanto)) {
-            resultado = isto.executar(declaracao.corpoEnquanto)
-            se isto.eControleRetorno(resultado) {
-                retorna resultado
+            var resultado: qualquer = isto.executar(declaracao.corpoEnquanto)
+            var decisao: texto = isto.decisaoLaco(resultado)
+            se decisao == "retornar" { retorna resultado }
+            se decisao == "parar" { retorna nulo }
+        }
+        retorna nulo
+    }
+
+    executarComandoPara(declaracao: Declaracao): qualquer {
+        // O inicializador (`var i = 0`) vive num escopo próprio do laço.
+        var escopoLaco: EspacoMemoria = EspacoMemoria()
+        isto.pilha.empilhar(escopoLaco)
+        se declaracao.paraInicializador != nulo {
+            isto.executar(declaracao.paraInicializador)
+        }
+        var resultadoFinal: qualquer = nulo
+        var continuarLaco: lógico = verdadeiro
+        enquanto continuarLaco {
+            se declaracao.paraCondicao != nulo e nao isto.eVerdadeiro(isto.avaliar(declaracao.paraCondicao)) {
+                continuarLaco = falso
+            } senao {
+                var resultado: qualquer = isto.executar(declaracao.paraCorpo)
+                var decisao: texto = isto.decisaoLaco(resultado)
+                se decisao == "retornar" {
+                    resultadoFinal = resultado
+                    continuarLaco = falso
+                } senao se decisao == "parar" {
+                    continuarLaco = falso
+                } senao se declaracao.paraIncremento != nulo {
+                    isto.avaliar(declaracao.paraIncremento)
+                }
             }
         }
+        isto.pilha.removerUltimo()
+        retorna resultadoFinal
+    }
+
+    // Elementos percorridos por `para cada`: vetor → elementos; texto → caracteres;
+    // dicionário → pares [chave, valor].
+    elementosIteraveis(iteravel: dicionário): qualquer[] {
+        var t: texto = isto.tipoDe(iteravel)
+        se t == "vetor" ou t == "tupla" {
+            var conteudo: ValorVetor = isto.comoVetor(iteravel)
+            retorna conteudo.elementos
+        }
+        var resultado: dicionário[] = []
+        se t == "texto" {
+            var caracteres: texto[] = isto.caracteresTexto(iteravel)
+            var i: inteiro = 0
+            enquanto i < caracteres.tamanho() {
+                var caractere: texto = caracteres[i]
+                resultado.adicionar(isto.criarValor("texto", caractere))
+                i = i + 1
+            }
+            retorna resultado
+        }
+        se t == "dicionario" {
+            var conteudoDicionario: ValorDicionario = isto.comoDicionario(iteravel)
+            var chaves: texto[] = conteudoDicionario.chaves()
+            var j: inteiro = 0
+            enquanto j < chaves.tamanho() {
+                var chave: texto = chaves[j]
+                var par: dicionário[] = []
+                par.adicionar(isto.criarValor("texto", chave))
+                par.adicionar(conteudoDicionario.obter(chave))
+                resultado.adicionar(isto.criarTupla(par))
+                j = j + 1
+            }
+            retorna resultado
+        }
+        falhar("Valor do tipo " + isto.nomeTipo(iteravel) + " não é iterável em 'para cada'.")
         retorna resultado
     }
 
+    executarComandoParaCada(declaracao: Declaracao): qualquer {
+        var iteravel: dicionário = isto.avaliar(declaracao.paraCadaIteravel)
+        var desestruturar: lógico = declaracao.paraCadaNomeValor != ""
+        se desestruturar e isto.tipoDe(iteravel) != "dicionario" {
+            falhar("'para cada {chave, valor}' exige um dicionário, não " + isto.nomeTipo(iteravel) + ".")
+        }
+        var itensLaco: qualquer[] = isto.elementosIteraveis(iteravel)
+
+        var escopoLaco: EspacoMemoria = EspacoMemoria()
+        isto.pilha.empilhar(escopoLaco)
+        var resultadoFinal: qualquer = nulo
+        // Por índice, relendo o tamanho: elementos acrescentados durante o laço também são vistos.
+        var i: inteiro = 0
+        enquanto i < itensLaco.tamanho() {
+            var elemento: dicionário = itensLaco[i]
+            se desestruturar {
+                var par: ValorVetor = isto.comoVetor(elemento)
+                isto.pilha.definirVariavel(declaracao.paraCadaNome, par.obter(0))
+                isto.pilha.definirVariavel(declaracao.paraCadaNomeValor, par.obter(1))
+            } senao {
+                isto.pilha.definirVariavel(declaracao.paraCadaNome, elemento)
+            }
+            var resultado: qualquer = isto.executar(declaracao.paraCorpo)
+            var decisao: texto = isto.decisaoLaco(resultado)
+            se decisao == "retornar" {
+                resultadoFinal = resultado
+                i = itensLaco.tamanho()
+            } senao se decisao == "parar" {
+                i = itensLaco.tamanho()
+            } senao {
+                i = i + 1
+            }
+        }
+        isto.pilha.removerUltimo()
+        retorna resultadoFinal
+    }
+
     executarComandoRetornar(declaracao: Declaracao): qualquer {
-        var valor: dicionário = isto.criarValor("nulo", nulo)
+        var valor: dicionário = isto.criarNulo()
         se declaracao.valorRetornar != nulo {
             valor = isto.avaliar(declaracao.valorRetornar)
         }
@@ -214,58 +2447,111 @@ classe Interpretador {
     }
 
     executarDeclaracaoFuncao(declaracao: Declaracao): qualquer {
-        var nomesParametros: texto[] = []
-        var i: inteiro = 0
-        enquanto i < declaracao.funcaoParametros.tamanho() {
-            nomesParametros.adicionar(declaracao.funcaoParametros[i].lexema)
-            i = i + 1
-        }
-
-        var dadosFuncao: ValorFuncao = ValorFuncao(nomesParametros, declaracao.funcaoCorpo)
-
-        var valorFuncao: dicionário = isto.criarValor("funcao", dadosFuncao)
-        isto.pilha.definirVariavel(declaracao.funcaoNome.lexema, valorFuncao)
+        isto.pilha.definirVariavel(declaracao.funcaoNome.lexema, isto.criarValorFuncao(declaracao))
         retorna nulo
     }
 
     chamarFuncaoUsuario(dadosFuncao: ValorFuncao, args: qualquer[]): dicionário {
+        var semVinculo: dicionário = isto.criarNulo()
+        retorna isto.executarFuncao(dadosFuncao, args, semVinculo, semVinculo)
+    }
+
+    // Métodos: `vinculo` é o objeto (`isto`) e `classeDoMetodo`, a classe onde o método foi
+    // encontrado (base de `super`).
+    chamarFuncaoComVinculo(valorFuncao: dicionário, args: qualquer[], vinculo: dicionário, classeDoMetodo: dicionário): dicionário {
+        var dadosFuncao: ValorFuncao = valorFuncao["valor"]
+        retorna isto.executarFuncao(dadosFuncao, args, vinculo, classeDoMetodo)
+    }
+
+    executarFuncao(dadosFuncao: ValorFuncao, args: qualquer[], vinculo: dicionário, classeDoMetodo: dicionário): dicionário {
         var corpo: Declaracao = dadosFuncao.corpo
+        var linhaChamada: número = isto.linhaAtual
+        var pilhaChamador: PilhaEscoposExecucao = isto.pilha
+        var arquivoChamador: texto = isto.arquivoAtual
+        var diretorioChamador: texto = isto.diretorioAtual
 
+        // O corpo enxerga os escopos de onde a função foi declarada, mais um escopo novo.
+        var pilhaFuncao: PilhaEscoposExecucao = PilhaEscoposExecucao()
+        var j: inteiro = 0
+        enquanto j < dadosFuncao.escopos.tamanho() {
+            var escopoCapturado: EspacoMemoria = dadosFuncao.escopos[j]
+            pilhaFuncao.empilhar(escopoCapturado)
+            j = j + 1
+        }
         var escopoChamada: EspacoMemoria = EspacoMemoria()
-        isto.pilha.empilhar(escopoChamada)
+        pilhaFuncao.empilhar(escopoChamada)
+        isto.pilha = pilhaFuncao
+        isto.arquivoAtual = dadosFuncao.arquivo
+        isto.diretorioAtual = dadosFuncao.diretorio
 
+        se isto.tipoDe(vinculo) != "nulo" {
+            isto.pilha.definirVariavel("isto", vinculo)
+        }
+        se isto.tipoDe(classeDoMetodo) == "classe" {
+            isto.pilha.definirVariavel("__classeDoMetodo", classeDoMetodo)
+        }
+
+        var quantidadeParametros: inteiro = dadosFuncao.parametros.tamanho()
         var i: inteiro = 0
-        enquanto i < dadosFuncao.parametros.tamanho() {
-            var valorArg: dicionário = isto.criarValor("nulo", nulo)
-            se i < args.tamanho() {
+        enquanto i < quantidadeParametros {
+            var valorArg: dicionário = isto.criarNulo()
+            se dadosFuncao.variadica e i == quantidadeParametros - 1 {
+                var restantes: dicionário[] = []
+                var k: inteiro = i
+                enquanto k < args.tamanho() {
+                    var restante: dicionário = args[k]
+                    restantes.adicionar(restante)
+                    k = k + 1
+                }
+                valorArg = isto.criarVetor(restantes)
+            } senao se i < args.tamanho() {
                 valorArg = args[i]
+            } senao se i < dadosFuncao.padroes.tamanho() {
+                var padraoParametro: Construto = dadosFuncao.padroes[i]
+                se padraoParametro.noh != "SemPadrao" {
+                    valorArg = isto.avaliar(padraoParametro)
+                }
             }
             isto.pilha.definirVariavel(dadosFuncao.parametros[i], valorArg)
             i = i + 1
         }
 
         var resultado: qualquer = isto.executar(corpo)
-        isto.pilha.removerUltimo()
+        isto.pilha = pilhaChamador
+        isto.arquivoAtual = arquivoChamador
+        isto.diretorioAtual = diretorioChamador
+        isto.linhaAtual = linhaChamada
 
-        se isto.eControleRetorno(resultado) {
+        var sinal: texto = isto.tipoControle(resultado)
+        se sinal == "retornar" {
             var controle: dicionário = resultado
             retorna controle["valor"]
         }
-        retorna isto.criarValor("nulo", nulo)
+        se sinal != "" {
+            falhar("'" + isto.nomeComandoControle(sinal) + "' fora de um laço.")
+        }
+        retorna isto.criarNulo()
     }
 
     avaliarUnario(no: Construto): dicionário {
         var operando: dicionário = isto.avaliar(no.operando)
         var tipoOp: texto = no.simboloOperador._tipo
 
-        se tipoOp == "NEGACAO" {
+        se tipoOp == "BIT_NOT" {
+            var operandoBits: longo = isto.paraLongo(operando)
+            var invertidoLongo: longo = 0 - operandoBits - 1
+            var invertido: número = invertidoLongo
+            retorna isto.criarValor("numero", invertido)
+        }
+        se tipoOp == "NEGACAO" ou tipoOp == "NAO" {
             retorna isto.criarValor("logico", nao isto.eVerdadeiro(operando))
         }
         se tipoOp == "SUBTRACAO" {
             var n: número = isto.paraNumero(operando)
             retorna isto.criarValor("numero", -n)
         }
-        retorna isto.criarValor("nulo", nulo)
+        falhar("Operador unário não suportado: " + tipoOp + ".")
+        retorna nulo
     }
 
     avaliarBinario(no: Construto): dicionário {
@@ -273,10 +2559,48 @@ classe Interpretador {
         var dir: dicionário = isto.avaliar(no.direita)
         var tipoOp: texto = no.simboloOperador._tipo
 
-        se esq["tipo"] == "texto" ou dir["tipo"] == "texto" {
-            se tipoOp == "ADICAO" {
-                retorna isto.criarValor("texto", isto.paraTextoExibicao(esq) + isto.paraTextoExibicao(dir))
+        // `operador +(outro) { ... }` na classe do operando esquerdo.
+        se isto.tipoDe(esq) == "objeto" {
+            var buscaOperador: dicionário = isto.procurarMetodo(isto.comoObjeto(esq).classeObjeto, "operador" + no.simboloOperador.lexema)
+            se isto.encontrou(buscaOperador) {
+                var argumentosOperador: qualquer[] = []
+                argumentosOperador.adicionar(dir)
+                retorna isto.chamarFuncaoComVinculo(buscaOperador["metodo"], argumentosOperador, esq, buscaOperador["classe"])
             }
+        }
+
+        se tipoOp == "IGUAL_IGUAL" { retorna isto.criarValor("logico", isto.valoresIguais(esq, dir)) }
+        se tipoOp == "EM" { retorna isto.criarValor("logico", isto.pertence(esq, dir)) }
+        se tipoOp == "CONTEM" { retorna isto.criarValor("logico", isto.pertence(dir, esq)) }
+        se tipoOp == "BIT_AND" ou tipoOp == "BIT_OR" ou tipoOp == "BIT_XOR" ou tipoOp == "MENOR_MENOR" ou tipoOp == "MAIOR_MAIOR" {
+            retorna isto.avaliarBits(tipoOp, esq, dir)
+        }
+        se tipoOp == "DIFERENTE" { retorna isto.criarValor("logico", nao isto.valoresIguais(esq, dir)) }
+
+        var tipoEsq: texto = isto.tipoDe(esq)
+        var tipoDir: texto = isto.tipoDe(dir)
+
+        // "texto" % valores: formatação.
+        se tipoOp == "MODULO" e tipoEsq == "texto" {
+            retorna isto.formatarTexto(isto.comoTexto(esq), dir)
+        }
+
+        // + junta como texto quando um lado é texto, ou quando um lado é lógico e o outro não
+        // (1 + verdadeiro é "1verdadeiro", como no núcleo de Delégua).
+        var juntarComoTexto: lógico = tipoEsq == "texto" ou tipoDir == "texto"
+        se tipoEsq != tipoDir e (tipoEsq == "logico" ou tipoDir == "logico") { juntarComoTexto = verdadeiro }
+        se tipoOp == "ADICAO" e juntarComoTexto {
+            retorna isto.criarValor("texto", isto.paraTextoExibicao(esq) + isto.paraTextoExibicao(dir))
+        }
+
+        // Comparação de textos (ordem lexicográfica).
+        se tipoEsq == "texto" e tipoDir == "texto" {
+            var textoEsq: texto = isto.comoTexto(esq)
+            var textoDir: texto = isto.comoTexto(dir)
+            se tipoOp == "MAIOR" { retorna isto.criarValor("logico", textoEsq > textoDir) }
+            se tipoOp == "MAIOR_IGUAL" { retorna isto.criarValor("logico", textoEsq >= textoDir) }
+            se tipoOp == "MENOR" { retorna isto.criarValor("logico", textoEsq < textoDir) }
+            se tipoOp == "MENOR_IGUAL" { retorna isto.criarValor("logico", textoEsq <= textoDir) }
         }
 
         var a: número = isto.paraNumero(esq)
@@ -293,13 +2617,12 @@ classe Interpretador {
         }
         se tipoOp == "MODULO" { retorna isto.criarValor("numero", a % b) }
         se tipoOp == "EXPONENCIACAO" { retorna isto.criarValor("numero", a ** b) }
-        se tipoOp == "IGUAL_IGUAL" { retorna isto.criarValor("logico", a == b) }
-        se tipoOp == "DIFERENTE" { retorna isto.criarValor("logico", a != b) }
         se tipoOp == "MAIOR" { retorna isto.criarValor("logico", a > b) }
         se tipoOp == "MAIOR_IGUAL" { retorna isto.criarValor("logico", a >= b) }
         se tipoOp == "MENOR" { retorna isto.criarValor("logico", a < b) }
         se tipoOp == "MENOR_IGUAL" { retorna isto.criarValor("logico", a <= b) }
-        retorna isto.criarValor("nulo", nulo)
+        falhar("Operador binário não suportado: " + tipoOp + ".")
+        retorna nulo
     }
 
     avaliarLogico(no: Construto): dicionário {
@@ -314,10 +2637,31 @@ classe Interpretador {
             se isto.eVerdadeiro(esq) { retorna esq }
             retorna isto.avaliar(no.direita)
         }
-        retorna isto.criarValor("nulo", nulo)
+        se tipoOp == "ELVIS" {
+            se isto.tipoDe(esq) != "nulo" { retorna esq }
+            retorna isto.avaliar(no.direita)
+        }
+        falhar("Operador lógico não suportado: " + tipoOp + ".")
+        retorna nulo
     }
 
     avaliarChamada(no: Construto): dicionário {
+        se no.entidadeChamada.noh == "Super" {
+            var argsSuper: qualquer[] = []
+            var indiceSuper: inteiro = 0
+            enquanto indiceSuper < no.argumentos.tamanho() {
+                argsSuper.adicionar(isto.avaliar(no.argumentos[indiceSuper]))
+                indiceSuper = indiceSuper + 1
+            }
+            retorna isto.chamarSuper(no.entidadeChamada, argsSuper)
+        }
+
+        // `objeto.metodo(...)`: o objeto é avaliado antes dos argumentos.
+        var objetoMetodo: dicionário = nulo
+        se no.entidadeChamada.noh == "AcessoMembro" {
+            objetoMetodo = isto.avaliar(no.entidadeChamada.objetoAcessado)
+        }
+
         var args: qualquer[] = []
         var indiceArg: inteiro = 0
         enquanto indiceArg < no.argumentos.tamanho() {
@@ -325,32 +2669,87 @@ classe Interpretador {
             indiceArg = indiceArg + 1
         }
 
-        se no.entidadeChamada.noh == "Variavel" {
-            var nomeChamado: texto = no.entidadeChamada.simbolo.lexema
-            var valorEntidade: dicionário = isto.pilha.obterValorVariavel(nomeChamado)
-
-            se valorEntidade != nulo e valorEntidade["tipo"] == "nativa" {
-                var nomeNativa: texto = valorEntidade["valor"]
-                retorna isto.chamarNativo(nomeNativa, args)
+        var valorEntidade: dicionário = isto.criarNulo()
+        se no.entidadeChamada.noh == "AcessoMembro" {
+            se isto.tipoDe(objetoMetodo) == "objeto" {
+                retorna isto.chamarMetodoObjeto(objetoMetodo, no.entidadeChamada.nomeMembro, args)
             }
-            se valorEntidade != nulo e valorEntidade["tipo"] == "funcao" {
-                retorna isto.chamarFuncaoUsuario(valorEntidade["valor"], args)
+            se isto.tipoDe(objetoMetodo) != "modulo" {
+                retorna isto.chamarMetodo(objetoMetodo, no.entidadeChamada.nomeMembro, args)
             }
-
-            falhar("Entidade não é chamável: '" + nomeChamado + "'.")
+            valorEntidade = isto.membroDeModulo(objetoMetodo, no.entidadeChamada.nomeMembro)
+        } senao {
+            valorEntidade = isto.avaliar(no.entidadeChamada)
         }
+        var descricao: texto = ""
+        se no.entidadeChamada.noh == "Variavel" { descricao = no.entidadeChamada.simbolo.lexema }
+        retorna isto.chamarValor(valorEntidade, args, descricao)
+    }
 
-        falhar("Entidade não é chamável.")
-        retorna nulo
+    // x++ devolve o valor antigo; ++x, o novo.
+    avaliarIncremento(no: Construto): dicionário {
+        var alvo: Construto = no.operando
+        var antigo: dicionário = isto.avaliar(alvo)
+        var delta: número = 1
+        se no.simboloOperador._tipo == "DECREMENTAR" { delta = -1 }
+        var novoNumero: número = isto.paraNumero(antigo) + delta
+        var novo: dicionário = isto.criarValor("numero", novoNumero)
+        isto.atribuirAlvo(alvo, novo)
+        se no.posicaoUnario == "DEPOIS" { retorna antigo }
+        retorna novo
     }
 
     avaliarAtribuicao(no: Construto): dicionário {
-        var alvo: Construto = no.alvoAtribuicao
-        var valorAtrib: dicionário = isto.avaliar(no.valorAtribuicao)
+        var valorAtribuido: dicionário = isto.avaliar(no.valorAtribuicao)
+        retorna isto.atribuirAlvo(no.alvoAtribuicao, valorAtribuido)
+    }
+
+    atribuirAlvo(alvo: Construto, valorAtrib: dicionário): dicionário {
+        se alvo.noh == "AcessoMembro" {
+            var objetoAlvo: dicionário = isto.avaliar(alvo.objetoAcessado)
+            se isto.tipoDe(objetoAlvo) == "dicionario" {
+                var dicionarioAlvo: ValorDicionario = isto.comoDicionario(objetoAlvo)
+                dicionarioAlvo.definir(alvo.nomeMembro, valorAtrib)
+                retorna valorAtrib
+            }
+            se isto.tipoDe(objetoAlvo) != "objeto" {
+                falhar("Não é possível atribuir a propriedade '" + alvo.nomeMembro + "' de um valor do tipo " + isto.nomeTipo(objetoAlvo) + ".")
+            }
+            var conteudoObjeto: ValorObjeto = isto.comoObjeto(objetoAlvo)
+            conteudoObjeto.definirCampo(alvo.nomeMembro, valorAtrib)
+            retorna valorAtrib
+        }
 
         se alvo.noh == "Variavel" {
             isto.pilha.atribuirVariavel(alvo.simbolo.lexema, valorAtrib)
             retorna valorAtrib
+        }
+
+        se alvo.noh == "AcessoIndice" {
+            var objeto: dicionário = isto.avaliar(alvo.objetoAcessado)
+            var indice: dicionário = isto.avaliar(alvo.indice)
+            var t: texto = isto.tipoDe(objeto)
+            se t == "vetor" {
+                var conteudo: ValorVetor = isto.comoVetor(objeto)
+                var posicaoBruta: inteiro = isto.paraInteiro(indice)
+                // Atribuir logo após o último elemento acrescenta, como em `v[v.tamanho()] = x`.
+                se posicaoBruta == conteudo.tamanho() {
+                    conteudo.adicionar(valorAtrib)
+                    retorna valorAtrib
+                }
+                var posicao: inteiro = conteudo.posicao(posicaoBruta)
+                se posicao < 0 {
+                    falhar("Índice " + isto.paraTextoExibicao(indice) + " fora do vetor de tamanho " + texto(conteudo.tamanho()) + ".")
+                }
+                conteudo.definir(posicao, valorAtrib)
+                retorna valorAtrib
+            }
+            se t == "dicionario" {
+                var conteudoDicionario: ValorDicionario = isto.comoDicionario(objeto)
+                conteudoDicionario.definir(isto.paraChave(indice), valorAtrib)
+                retorna valorAtrib
+            }
+            falhar("Tipo " + isto.nomeTipo(objeto) + " não suporta atribuição por índice.")
         }
 
         falhar("Alvo de atribuição inválido.")
@@ -358,7 +2757,7 @@ classe Interpretador {
     }
 
     executarDeclaracaoVariavel(declaracao: Declaracao): qualquer {
-        var valorVar: dicionário = isto.criarValor("nulo", nulo)
+        var valorVar: dicionário = isto.criarNulo()
         se declaracao.variavelInicializador != nulo {
             valorVar = isto.avaliar(declaracao.variavelInicializador)
         }
@@ -372,6 +2771,13 @@ classe Interpretador {
         var indiceInterp: inteiro = 0
         enquanto indiceInterp < listaDeclaracoes.tamanho() {
             resInterp = isto.executar(listaDeclaracoes[indiceInterp])
+            var sinal: texto = isto.tipoControle(resInterp)
+            se sinal == "sustar" ou sinal == "continuar" {
+                falhar("'" + isto.nomeComandoControle(sinal) + "' fora de um laço.")
+            }
+            se sinal == "retornar" {
+                falhar("'retorna' fora de uma função.")
+            }
             indiceInterp = indiceInterp + 1
         }
         retorna resInterp

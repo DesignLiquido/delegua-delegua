@@ -1,0 +1,3 @@
+classe A { }
+classe B { }
+classe C herda A, B { }

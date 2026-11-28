@@ -1,0 +1,7 @@
+// Módulo criptografia (OpenSSL no delegua-llvm).
+importar tudo como criptografia de "criptografia"
+escreva(criptografia.codificarBase64("olá, mundo"), criptografia.decodificarBase64("b2zDoSwgbXVuZG8="))
+escreva(criptografia.hmacSha256("dados", "chave"))
+escreva(criptografia.sha256("abc"))
+escreva(criptografia.md5("abc"), criptografia.sha1("abc"))
+escreva(criptografia.gerarUuid().tamanho(), criptografia.gerarTextoAleatorio(12).tamanho())

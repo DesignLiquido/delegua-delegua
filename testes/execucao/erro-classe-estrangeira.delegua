@@ -1,0 +1,10 @@
+classe estrangeira Modelo {
+    salvar()
+}
+classe Usuario herda Modelo {
+    nome: texto
+    salvar() { retorna "salvo" }
+}
+escreva(Usuario().salvar())
+var m = Modelo()
+escreva(m)

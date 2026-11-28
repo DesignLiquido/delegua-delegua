@@ -1,0 +1,19 @@
+// importar: tudo como, { nomes }, importar(...) como expressão, pacotes da Pacoteca,
+// estado de módulo carregado uma vez, escopo léxico e importação circular.
+importar tudo como geometria de "./modulos/geometria.delegua"
+importar { incrementar, vezesCarregado } de "./modulos/contador.delegua"
+importar { saudar } de "saudacao"
+var contador = importar("./modulos/contador")
+
+escreva(geometria.areaCirculo(2), geometria.fatorial(5), geometria.pi)
+escreva(incrementar(10), contador.total, vezesCarregado())
+escreva(saudar("mundo"))
+escreva(tipo de geometria)
+
+// Funções do módulo não enxergam variáveis de quem chama.
+var quadrado = "do programa principal"
+escreva(geometria.areaCirculo(1), quadrado)
+
+importar tudo como cicloA de "./modulos/ciclo-a.delegua"
+importar tudo como cicloB de "./modulos/ciclo-b.delegua"
+escreva(cicloA.nomeB(), cicloB.chamarA())

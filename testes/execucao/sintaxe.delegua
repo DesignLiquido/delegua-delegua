@@ -1,0 +1,36 @@
+// Sintaxe do núcleo de Delégua: `;` opcional, `se`/`enquanto` sem parênteses,
+// comentários, atribuição composta, igualdade por tipo e índice de texto.
+var x = 10;
+var y = 3
+/* comentário
+   de várias linhas */
+se x > y {
+    escreva("maior")
+} senao {
+    escreva("menor")
+}
+se (x == 10) escreva("dez")
+
+var soma = 0
+var i = 0
+enquanto i < 5 {
+    soma += i
+    i = i + 1
+}
+soma -= 1
+soma *= 2
+escreva(soma)
+
+escreva("a" == "a", "a" == "b", 1 == "1", nulo == nulo, [1] == [1])
+var lista = [1]
+var outra = lista
+escreva(lista == outra, lista != outra)
+escreva("abc"[0], "abc"[-1], "b" > "a")
+escreva(tipo([]), tipo({}), tipo(1), tipo("x"), tipo(verdadeiro), tipo(nulo))
+var numero = 3
+escreva(tipo de numero, tipo de "x", tipo de [1] == "vetor")
+
+funcao semValor() {
+    retorna
+}
+escreva(semValor())

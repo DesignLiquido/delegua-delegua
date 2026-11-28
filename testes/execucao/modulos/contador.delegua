@@ -1,0 +1,13 @@
+// Estado do módulo: executado uma só vez, mesmo importado várias vezes.
+var carregamentos = 0
+carregamentos += 1
+var total = 0
+
+funcao incrementar(quantidade) {
+    total = total + quantidade
+    retorna total
+}
+
+funcao vezesCarregado() {
+    retorna carregamentos
+}

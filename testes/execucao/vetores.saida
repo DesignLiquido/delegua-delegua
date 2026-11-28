@@ -1,0 +1,9 @@
+[1, 'a', verdadeiro, nulo, [2, 3], {"k":"x"}]
+6 6
+a {"k":"x"} 2
+7 42
+[10, 21, 30]
+30 10 [21]
+a-b-c-d a,b,c,d ['b', 'c'] ['c', 'd']
+verdadeiro falso verdadeiro
+1 [1]

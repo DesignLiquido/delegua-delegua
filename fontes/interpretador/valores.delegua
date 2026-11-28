@@ -1,0 +1,219 @@
+importar { EspacoMemoria } de "./espaco-memoria.delegua"
+
+// Conteúdo dos valores compostos do interpretador (ver Interpretador.criarValor).
+//
+// Como em ValorFuncao, ficam em classes, e não soltos em um `dicionário`, porque acesso a
+// campo de classe preserva o tipo estático (`dicionário[]`, `dicionário`) quando o
+// interpretador é compilado; leitura por chave de `dicionário` sempre resolve para `qualquer`.
+//
+// Vetores e dicionários de Delégua são referências: duas variáveis com o mesmo vetor
+// enxergam as mesmas alterações. Por isso o valor dinâmico ({tipo, valor}) guarda a
+// instância, que é compartilhada, e nunca uma cópia dos elementos.
+
+// Elementos de um vetor, cada um um valor dinâmico ({tipo, valor}).
+classe ValorVetor {
+    elementos: dicionário[]
+    // Identidade, para `==` por referência (o `==` do hospedeiro compilado não compara
+    // instâncias por endereço).
+    identificador: inteiro
+
+    construtor(elementos: dicionário[], identificador: inteiro) {
+        isto.elementos = elementos
+        isto.identificador = identificador
+    }
+
+    tamanho(): inteiro {
+        retorna isto.elementos.tamanho()
+    }
+
+    // Converte um índice (negativo conta do fim) em posição; -1 se estiver fora do vetor.
+    posicao(indice: inteiro): inteiro {
+        var resolvido: inteiro = indice
+        se resolvido < 0 {
+            resolvido = isto.elementos.tamanho() + resolvido
+        }
+        se resolvido < 0 ou resolvido >= isto.elementos.tamanho() {
+            retorna -1
+        }
+        retorna resolvido
+    }
+
+    obter(posicao: inteiro): dicionário {
+        var elemento: dicionário = isto.elementos[posicao]
+        retorna elemento
+    }
+
+    definir(posicao: inteiro, valor: dicionário) {
+        isto.elementos[posicao] = valor
+    }
+
+    adicionar(valor: dicionário) {
+        isto.elementos.adicionar(valor)
+    }
+}
+
+// Entradas de um dicionário: chave (texto) → valor dinâmico. A ordem de inserção das
+// chaves é preservada pelo dicionário do hospedeiro.
+classe ValorDicionario {
+    entradas: dicionário
+    identificador: inteiro
+
+    construtor(identificador: inteiro) {
+        isto.entradas = {}
+        isto.identificador = identificador
+    }
+
+    tamanho(): inteiro {
+        retorna isto.entradas.tamanho()
+    }
+
+    contem(chave: texto): lógico {
+        retorna isto.entradas.contem(chave)
+    }
+
+    obter(chave: texto): dicionário {
+        var valor: dicionário = isto.entradas[chave]
+        retorna valor
+    }
+
+    definir(chave: texto, valor: dicionário) {
+        isto.entradas[chave] = valor
+    }
+
+    remover(chave: texto): lógico {
+        se nao isto.entradas.contem(chave) {
+            retorna falso
+        }
+        isto.entradas.remover(chave)
+        retorna verdadeiro
+    }
+
+    chaves(): texto[] {
+        var resultado: texto[] = isto.entradas.chaves()
+        retorna resultado
+    }
+}
+
+// Módulo importado: o escopo de nível superior do arquivo, onde ficam suas declarações.
+classe ValorModulo {
+    caminho: texto
+    escopo: EspacoMemoria
+    identificador: inteiro
+
+    construtor(caminho: texto, escopo: EspacoMemoria, identificador: inteiro) {
+        isto.caminho = caminho
+        isto.escopo = escopo
+        isto.identificador = identificador
+    }
+
+    contem(nome: texto): lógico {
+        retorna isto.escopo.valores.contem(nome)
+    }
+
+    obter(nome: texto): dicionário {
+        var envoltorio: dicionário = isto.escopo.valores[nome]
+        var valor: dicionário = envoltorio["valor"]
+        retorna valor
+    }
+}
+
+// Fonte única de identificadores (vetores, dicionários, módulos), compartilhada entre o
+// interpretador e os módulos nativos para que `==` por referência continue correto.
+classe ContadorIdentificadores {
+    proximo: inteiro
+
+    construtor() {
+        isto.proximo = 1
+    }
+
+    novo(): inteiro {
+        var identificador: inteiro = isto.proximo
+        isto.proximo = identificador + 1
+        retorna identificador
+    }
+}
+
+// Classe declarada com `classe`. `metodos`: nome → valor "funcao" (ValorFuncao).
+// `superclasse` é o valor dinâmico da classe pai ({tipo: "classe"}) ou um valor nulo.
+classe ValorClasse {
+    nome: texto
+    superclasse: dicionário
+    metodos: dicionário
+    nomesMetodos: texto[]
+    campos: texto[]
+    identificador: inteiro
+    ehAbstrata: lógico
+    ehEstrangeira: lógico
+    // Métodos declarados sem corpo (em interfaces: os métodos exigidos).
+    abstratos: texto[]
+    // Classes mescladas (`mescla`), na ordem de declaração.
+    mesclas: qualquer[]
+    // Interfaces implementadas, inclusive as herdadas por elas.
+    interfaces: texto[]
+
+    construtor(nome: texto, superclasse: dicionário, campos: texto[], identificador: inteiro) {
+        isto.nome = nome
+        isto.superclasse = superclasse
+        isto.metodos = {}
+        isto.nomesMetodos = []
+        isto.campos = campos
+        isto.identificador = identificador
+        isto.ehAbstrata = falso
+        isto.ehEstrangeira = falso
+        isto.abstratos = []
+        isto.mesclas = []
+        isto.interfaces = []
+    }
+
+    temSuperclasse(): lógico {
+        var tipoSuperclasse: texto = isto.superclasse["tipo"]
+        retorna tipoSuperclasse == "classe"
+    }
+
+    definirMetodo(nome: texto, valorFuncao: dicionário) {
+        se nao isto.metodos.contem(nome) {
+            isto.nomesMetodos.adicionar(nome)
+        }
+        isto.metodos[nome] = valorFuncao
+    }
+
+    temMetodoProprio(nome: texto): lógico {
+        retorna isto.metodos.contem(nome)
+    }
+
+    metodoProprio(nome: texto): dicionário {
+        var metodo: dicionário = isto.metodos[nome]
+        retorna metodo
+    }
+}
+
+// Instância de uma classe. `campos`: nome → valor dinâmico; `nomesCampos` guarda a ordem.
+classe ValorObjeto {
+    classeObjeto: dicionário
+    campos: dicionário
+    nomesCampos: texto[]
+    identificador: inteiro
+
+    construtor(classeObjeto: dicionário, identificador: inteiro) {
+        isto.classeObjeto = classeObjeto
+        isto.campos = {}
+        isto.nomesCampos = []
+        isto.identificador = identificador
+    }
+
+    temCampo(nome: texto): lógico {
+        retorna isto.campos.contem(nome)
+    }
+
+    obterCampo(nome: texto): dicionário {
+        var valor: dicionário = isto.campos[nome]
+        retorna valor
+    }
+
+    definirCampo(nome: texto, valor: dicionário) {
+        se nao isto.campos.contem(nome) {
+            isto.nomesCampos.adicionar(nome)
+        }
+        isto.campos[nome] = valor
+    }
+}

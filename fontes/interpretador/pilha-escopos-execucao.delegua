@@ -14,6 +14,29 @@ classe PilhaEscoposExecucao {
         isto.pilha[isto.topo] = escopoMemoria
     }
 
+    // Escopos visíveis agora, da base ao topo. Funções guardam essa lista ao serem
+    // declaradas (escopo léxico): os EspacoMemoria são compartilhados, não copiados.
+    capturar(): EspacoMemoria[] {
+        var escopos: EspacoMemoria[] = []
+        var i: inteiro = 0
+        enquanto i <= isto.topo {
+            var escopo: EspacoMemoria = isto.pilha[i]
+            escopos.adicionar(escopo)
+            i = i + 1
+        }
+        retorna escopos
+    }
+
+    existe(nome: texto): lógico {
+        var i: inteiro = isto.topo
+        enquanto i >= 0 {
+            var espaco: EspacoMemoria = isto.pilha[i]
+            se espaco.valores.contem(nome) { retorna verdadeiro }
+            i = i - 1
+        }
+        retorna falso
+    }
+
     eVazio(): lógico {
         retorna isto.topo < 0
     }

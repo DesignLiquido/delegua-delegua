@@ -4,6 +4,8 @@ importar { RetornoAvaliadorSintatico } de "./retorno-avaliador-sintatico.delegua
 importar { TiposSimbolos } de "../lexador/tipos-simbolos.delegua"
 importar { Construto } de "../construtos/construto.delegua"
 importar { Declaracao } de "../declaracoes/declaracao.delegua"
+importar { Lexador } de "../lexador/lexador.delegua"
+importar { RetornoLexador } de "../lexador/retorno-lexador.delegua"
 
 classe AvaliadorSintatico {
     simbolos: Simbolo[]
@@ -24,8 +26,29 @@ classe AvaliadorSintatico {
         retorna isto.atual >= isto.simbolos.tamanho() ou isto.simbolos[isto.atual]._tipo == isto.tipos.EOF
     }
 
+    // No fim da entrada (o lexador não emite EOF), devolve um símbolo EOF na linha do último
+    // símbolo, para que mensagens de erro e verificações nunca leiam fora do vetor.
     simboloAtual(): Simbolo {
+        se isto.atual >= isto.simbolos.tamanho() {
+            var linhaFinal: número = 1
+            se isto.simbolos.tamanho() > 0 {
+                linhaFinal = isto.simbolos[isto.simbolos.tamanho() - 1].linha
+            }
+            var simboloFim: Simbolo = Simbolo("", isto.tipos.EOF, linhaFinal, -1)
+            retorna simboloFim
+        }
         retorna isto.simbolos[isto.atual]
+    }
+
+    // `;` é opcional ao fim de declarações e comandos, como no núcleo de Delégua.
+    consumirPontoEVirgulaOpcional() {
+        isto.verificarSeSimboloAtualEIgualA(isto.tipos.PONTO_E_VIRGULA)
+    }
+
+    // Linha do símbolo atual (para marcar construtos e declarações).
+    linhaAtual(): número {
+        var simbolo: Simbolo = isto.simboloAtual()
+        retorna simbolo.linha
     }
 
     simboloAnterior(): Simbolo {
@@ -84,7 +107,181 @@ classe AvaliadorSintatico {
         retorna isto.simboloAtual()
     }
 
+    // [a, b, c] — vírgula final permitida.
+    analisarVetor(): Construto {
+        var noVetor: Construto = Construto("Vetor")
+        noVetor.linha = isto.simboloAnterior().linha
+        var elementos: Construto[] = []
+        enquanto nao isto.verificarTipoSimboloAtual(isto.tipos.COLCHETE_DIREITO) e nao isto.terminou() {
+            var elemento: Construto = isto.analisarExpressao()
+            se elemento == nulo {
+                retorna nulo
+            }
+            elementos.adicionar(elemento)
+            se nao isto.verificarSeSimboloAtualEIgualA(isto.tipos.VIRGULA) {
+                sustar
+            }
+        }
+        isto.consumir(isto.tipos.COLCHETE_DIREITO, "Esperado ']' após elementos do vetor.")
+        noVetor.elementos = elementos
+        retorna noVetor
+    }
+
+    // {chave: valor, ...} — vírgula final permitida.
+    analisarDicionario(): Construto {
+        var noDicionario: Construto = Construto("Dicionario")
+        noDicionario.linha = isto.simboloAnterior().linha
+        var chaves: Construto[] = []
+        var valores: Construto[] = []
+        enquanto nao isto.verificarTipoSimboloAtual(isto.tipos.CHAVE_DIREITA) e nao isto.terminou() {
+            var chave: Construto = isto.analisarExpressao()
+            se chave == nulo {
+                retorna nulo
+            }
+            isto.consumir(isto.tipos.DOIS_PONTOS, "Esperado ':' após chave do dicionário.")
+            var valor: Construto = isto.analisarExpressao()
+            se valor == nulo {
+                retorna nulo
+            }
+            chaves.adicionar(chave)
+            valores.adicionar(valor)
+            se nao isto.verificarSeSimboloAtualEIgualA(isto.tipos.VIRGULA) {
+                sustar
+            }
+        }
+        isto.consumir(isto.tipos.CHAVE_DIREITA, "Esperado '}' após entradas do dicionário.")
+        noDicionario.chavesDicionario = chaves
+        noDicionario.valoresDicionario = valores
+        retorna noDicionario
+    }
+
+    // importar("caminho"): expressão cujo valor é o módulo.
+    analisarImportarComoExpressao(): Construto {
+        var simboloImportar: Simbolo = isto.simboloAnterior()
+        isto.consumir(isto.tipos.PARENTESE_ESQUERDO, "Esperado '(' após 'importar'.")
+        var caminho: Simbolo = isto.consumir(isto.tipos.TEXTO, "Esperado caminho (texto) em 'importar(...)'.")
+        isto.consumir(isto.tipos.PARENTESE_DIREITO, "Esperado ')' após o caminho em 'importar(...)'.")
+        var noImportar: Construto = Construto("Importar")
+        noImportar.linha = simboloImportar.linha
+        noImportar.literalTexto = caminho.lexema
+        retorna noImportar
+    }
+
+    // "texto ${expressao} texto": devolve um construto Interpolacao (partes literais e
+    // expressões), ou nulo se o texto não tiver interpolação completa. Cada expressão é
+    // lida por um lexador e um avaliador sintático próprios.
+    analisarInterpolacao(simboloTexto: Simbolo): Construto {
+        var conteudo: texto = simboloTexto.lexema
+        var partes: Construto[] = []
+        var temExpressao: lógico = falso
+        var posicao: inteiro = 0
+        var procurarMais: lógico = verdadeiro
+        enquanto procurarMais {
+            var abertura: inteiro = conteudo.encontrar("${", posicao)
+            se abertura < 0 {
+                procurarMais = falso
+            } senao {
+                // Fechamento correspondente, contando chaves (dicionários dentro da expressão).
+                var profundidade: inteiro = 1
+                var i: inteiro = abertura + 2
+                var fechamento: inteiro = -1
+                enquanto i < conteudo.tamanho() e fechamento < 0 {
+                    var caractere: texto = conteudo[i]
+                    se caractere == "{" { profundidade = profundidade + 1 }
+                    se caractere == "}" {
+                        profundidade = profundidade - 1
+                        se profundidade == 0 { fechamento = i }
+                    }
+                    i = i + 1
+                }
+                se fechamento < 0 {
+                    procurarMais = falso
+                } senao {
+                    se abertura > posicao {
+                        partes.adicionar(isto.criarLiteralTexto(conteudo.subtexto(posicao, abertura)))
+                    }
+                    var expressao: Construto = isto.analisarExpressaoInterpolada(conteudo.subtexto(abertura + 2, fechamento), simboloTexto)
+                    se expressao == nulo {
+                        retorna nulo
+                    }
+                    partes.adicionar(expressao)
+                    temExpressao = verdadeiro
+                    posicao = fechamento + 1
+                }
+            }
+        }
+        se nao temExpressao {
+            retorna nulo
+        }
+        se posicao < conteudo.tamanho() {
+            partes.adicionar(isto.criarLiteralTexto(conteudo.subtexto(posicao, conteudo.tamanho())))
+        }
+        var noInterpolacao: Construto = Construto("Interpolacao")
+        noInterpolacao.linha = simboloTexto.linha
+        noInterpolacao.elementos = partes
+        retorna noInterpolacao
+    }
+
+    criarLiteralTexto(valor: texto): Construto {
+        var noLiteral: Construto = Construto("Literal")
+        noLiteral.tipoLiteral = "texto"
+        noLiteral.literalTexto = valor
+        retorna noLiteral
+    }
+
+    analisarExpressaoInterpolada(codigo: texto, simboloTexto: Simbolo): Construto {
+        var lexador: Lexador = Lexador()
+        var retornoLexador: RetornoLexador = lexador.mapear(codigo, 0)
+        se retornoLexador.erros.tamanho() > 0 {
+            isto.erro(simboloTexto, "Expressão inválida na interpolação '${" + codigo + "}'.")
+            retorna nulo
+        }
+        var avaliador: AvaliadorSintatico = AvaliadorSintatico()
+        avaliador.simbolos = retornoLexador.simbolos
+        avaliador.atual = 0
+        var expressao: Construto = avaliador.analisarExpressao()
+        se expressao == nulo ou avaliador.erros.tamanho() > 0 ou nao avaliador.terminou() {
+            isto.erro(simboloTexto, "Expressão inválida na interpolação '${" + codigo + "}'.")
+            retorna nulo
+        }
+        retorna expressao
+    }
+
     analisarPrimario(): Construto {
+        se isto.verificarSeSimboloAtualEIgualA(isto.tipos.FUNCAO) {
+            retorna isto.analisarFuncaoAnonima()
+        }
+
+        se isto.verificarSeSimboloAtualEIgualA(isto.tipos.ISTO) {
+            var noIsto: Construto = Construto("Isto")
+            noIsto.linha = isto.simboloAnterior().linha
+            retorna noIsto
+        }
+
+        // super.metodo(...) ou super(...)
+        se isto.verificarSeSimboloAtualEIgualA(isto.tipos.SUPER) {
+            var noSuper: Construto = Construto("Super")
+            noSuper.linha = isto.simboloAnterior().linha
+            noSuper.nomeMembro = ""
+            se isto.verificarSeSimboloAtualEIgualA(isto.tipos.PONTO) {
+                var metodoSuper: Simbolo = isto.consumirNomeMembro()
+                noSuper.nomeMembro = metodoSuper.lexema
+            }
+            retorna noSuper
+        }
+
+        se isto.verificarSeSimboloAtualEIgualA(isto.tipos.IMPORTAR) {
+            retorna isto.analisarImportarComoExpressao()
+        }
+
+        se isto.verificarSeSimboloAtualEIgualA(isto.tipos.COLCHETE_ESQUERDO) {
+            retorna isto.analisarVetor()
+        }
+
+        se isto.verificarSeSimboloAtualEIgualA(isto.tipos.CHAVE_ESQUERDA) {
+            retorna isto.analisarDicionario()
+        }
+
         se isto.verificarSeSimboloAtualEIgualA(isto.tipos.FALSO) {
             var noFalso: Construto = Construto("Literal")
             noFalso.tipoLiteral = "logico"
@@ -112,6 +309,12 @@ classe AvaliadorSintatico {
                 noLiteral.tipoLiteral = "numero"
                 noLiteral.literalNumero = numero(simboloLiteral.lexema)
             } senao {
+                se simboloLiteral.lexema.inclui("${") {
+                    var noInterpolacao: Construto = isto.analisarInterpolacao(simboloLiteral)
+                    se noInterpolacao != nulo {
+                        retorna noInterpolacao
+                    }
+                }
                 noLiteral.tipoLiteral = "texto"
                 noLiteral.literalTexto = simboloLiteral.lexema
             }
@@ -127,15 +330,64 @@ classe AvaliadorSintatico {
         }
 
         se isto.verificarSeSimboloAtualEIgualA(isto.tipos.PARENTESE_ESQUERDO) {
+            var linhaParentese: número = isto.simboloAnterior().linha
             var expressao: Construto = isto.analisarExpressao()
+            se expressao == nulo {
+                retorna nulo
+            }
+            se isto.verificarSeSimboloAtualEIgualA(isto.tipos.VIRGULA) {
+                var elementosTupla: Construto[] = []
+                elementosTupla.adicionar(expressao)
+                enquanto nao isto.verificarTipoSimboloAtual(isto.tipos.PARENTESE_DIREITO) e nao isto.terminou() {
+                    var elementoTupla: Construto = isto.analisarExpressao()
+                    se elementoTupla == nulo {
+                        retorna nulo
+                    }
+                    elementosTupla.adicionar(elementoTupla)
+                    se nao isto.verificarSeSimboloAtualEIgualA(isto.tipos.VIRGULA) {
+                        sustar
+                    }
+                }
+                isto.consumir(isto.tipos.PARENTESE_DIREITO, "Esperado ')' após os elementos da tupla.")
+                var noTupla: Construto = Construto("Tupla")
+                noTupla.linha = linhaParentese
+                noTupla.elementos = elementosTupla
+                retorna noTupla
+            }
             isto.consumir(isto.tipos.PARENTESE_DIREITO, "Esperado ')' após expressão.")
             var noAgrupamento: Construto = Construto("Agrupamento")
             noAgrupamento.expressao = expressao
             retorna noAgrupamento
         }
 
-        isto.erro(isto.simboloAtual(), "Esperada expressão.")
+        var simboloInesperado: Simbolo = isto.simboloAtual()
+        var lexemaInesperado: texto = simboloInesperado.lexema
+        se simboloInesperado._tipo != isto.tipos.IDENTIFICADOR e lexemaInesperado.tamanho() > 1 e simboloInesperado._tipo != isto.tipos.TEXTO e simboloInesperado._tipo != isto.tipos.NUMERO {
+            var primeiro: texto = lexemaInesperado[0]
+            se (primeiro >= "a" e primeiro <= "z") ou (primeiro >= "A" e primeiro <= "Z") {
+                isto.erro(simboloInesperado, "Recurso ainda não suportado pelo deldel: '" + lexemaInesperado + "'.")
+                retorna nulo
+            }
+        }
+        isto.erro(simboloInesperado, "Esperada expressão.")
         retorna nulo
+    }
+
+    // Nome após `.`: um identificador ou uma palavra reservada usada como nome de método
+    // (`d.contem(k)`, `x.tipo`), como no núcleo de Delégua.
+    consumirNomeMembro(): Simbolo {
+        var simbolo: Simbolo = isto.simboloAtual()
+        var lexema: texto = simbolo.lexema
+        se nao isto.terminou() e lexema.tamanho() > 0 {
+            var primeiro: texto = lexema[0]
+            var ehNome: lógico = (primeiro >= "a" e primeiro <= "z") ou (primeiro >= "A" e primeiro <= "Z") ou primeiro == "_"
+            se simbolo._tipo == isto.tipos.IDENTIFICADOR ou (ehNome e simbolo._tipo != isto.tipos.TEXTO) {
+                isto.avancarEDevolverAnterior()
+                retorna simbolo
+            }
+        }
+        isto.erro(simbolo, "Esperado nome de propriedade ou método após '.'.")
+        retorna simbolo
     }
 
     analisarChamada(): Construto {
@@ -164,9 +416,28 @@ classe AvaliadorSintatico {
 
                 isto.consumir(isto.tipos.PARENTESE_DIREITO, "Esperado ')' após argumentos.")
                 var noChamada: Construto = Construto("Chamada")
+                noChamada.linha = isto.simboloAnterior().linha
                 noChamada.entidadeChamada = expressao
                 noChamada.argumentos = argumentos
                 expressao = noChamada
+            } senao se isto.verificarSeSimboloAtualEIgualA(isto.tipos.COLCHETE_ESQUERDO) {
+                var indice: Construto = isto.analisarExpressao()
+                se indice == nulo {
+                    retorna nulo
+                }
+                isto.consumir(isto.tipos.COLCHETE_DIREITO, "Esperado ']' após índice.")
+                var noIndice: Construto = Construto("AcessoIndice")
+                noIndice.linha = isto.simboloAnterior().linha
+                noIndice.objetoAcessado = expressao
+                noIndice.indice = indice
+                expressao = noIndice
+            } senao se isto.verificarSeSimboloAtualEIgualA(isto.tipos.PONTO) {
+                var nomeMembro: Simbolo = isto.consumirNomeMembro()
+                var noMembro: Construto = Construto("AcessoMembro")
+                noMembro.linha = nomeMembro.linha
+                noMembro.objetoAcessado = expressao
+                noMembro.nomeMembro = nomeMembro.lexema
+                expressao = noMembro
             } senao {
                 continuarChamando = falso
             }
@@ -175,197 +446,253 @@ classe AvaliadorSintatico {
         retorna expressao
     }
 
+    // ++x / --x (antes) e x++ / x-- (depois): o alvo é uma variável ou um acesso por índice.
+    criarIncremento(simboloIncremento: Simbolo, alvo: Construto, posicao: texto): Construto {
+        se alvo.noh != "Variavel" e alvo.noh != "AcessoIndice" {
+            isto.erro(simboloIncremento, "Operando de '" + simboloIncremento.lexema + "' deve ser uma variável ou um acesso por índice.")
+        }
+        var noIncremento: Construto = Construto("Incremento")
+        noIncremento.linha = simboloIncremento.linha
+        noIncremento.simboloOperador = simboloIncremento
+        noIncremento.operando = alvo
+        noIncremento.posicaoUnario = posicao
+        retorna noIncremento
+    }
+
+    // `tipo de expressao`. `tipo(x)` continua sendo a chamada da nativa `tipo`.
+    eTipoDe(): lógico {
+        se nao isto.verificarTipoSimboloAtual(isto.tipos.TIPO) { retorna falso }
+        se isto.atual + 1 >= isto.simbolos.tamanho() { retorna falso }
+        var seguinte: Simbolo = isto.simbolos[isto.atual + 1]
+        retorna seguinte._tipo == isto.tipos.DE
+    }
+
+    criarOperacao(noh: texto, esquerda: Construto, simboloOp: Simbolo, direita: Construto): Construto {
+        var noOperacao: Construto = Construto(noh)
+        noOperacao.linha = simboloOp.linha
+        noOperacao.esquerda = esquerda
+        noOperacao.simboloOperador = simboloOp
+        noOperacao.direita = direita
+        retorna noOperacao
+    }
+
+    // Precedência, da menor para a maior:
+    //   ternário (a ? b : c) → ?: → ou → e → | → ^ → & → == != em contem
+    //   → > >= < <= → << >> → + - → * / \ % → unário (- ! não ~ ++ -- tipo de)
+    //   → ** (à direita; -2 ** 2 é -(2 ** 2)) → pós-fixo (chamada, índice, membro, x++ x--)
+
+    analisarPosfixo(): Construto {
+        var expressaoChamada: Construto = isto.analisarChamada()
+        se expressaoChamada != nulo e isto.verificarSeSimboloAtualCorresponde([isto.tipos.INCREMENTAR, isto.tipos.DECREMENTAR]) {
+            retorna isto.criarIncremento(isto.simboloAnterior(), expressaoChamada, "DEPOIS")
+        }
+        retorna expressaoChamada
+    }
+
+    analisarExponenciacao(): Construto {
+        var base: Construto = isto.analisarPosfixo()
+        se base == nulo {
+            retorna nulo
+        }
+        se isto.verificarSeSimboloAtualEIgualA(isto.tipos.EXPONENCIACAO) {
+            var simboloOp: Simbolo = isto.simboloAnterior()
+            var expoente: Construto = isto.analisarUnario()
+            se expoente == nulo {
+                retorna nulo
+            }
+            retorna isto.criarOperacao("Binario", base, simboloOp, expoente)
+        }
+        retorna base
+    }
+
     analisarUnario(): Construto {
-        se isto.verificarSeSimboloAtualCorresponde([isto.tipos.NEGACAO, isto.tipos.SUBTRACAO]) {
+        se isto.eTipoDe() {
+            var simboloTipo: Simbolo = isto.avancarEDevolverAnterior()
+            isto.avancarEDevolverAnterior()
+            var operandoTipo: Construto = isto.analisarUnario()
+            se operandoTipo == nulo {
+                retorna nulo
+            }
+            var noTipoDe: Construto = Construto("TipoDe")
+            noTipoDe.linha = simboloTipo.linha
+            noTipoDe.operando = operandoTipo
+            retorna noTipoDe
+        }
+
+        se isto.verificarSeSimboloAtualCorresponde([isto.tipos.INCREMENTAR, isto.tipos.DECREMENTAR]) {
+            var operadorPrefixo: Simbolo = isto.simboloAnterior()
+            var alvoPrefixo: Construto = isto.analisarUnario()
+            se alvoPrefixo == nulo {
+                retorna nulo
+            }
+            retorna isto.criarIncremento(operadorPrefixo, alvoPrefixo, "ANTES")
+        }
+
+        se isto.verificarSeSimboloAtualCorresponde([isto.tipos.NEGACAO, isto.tipos.NAO, isto.tipos.SUBTRACAO, isto.tipos.BIT_NOT]) {
             var operadorAtual: Simbolo = isto.simboloAnterior()
             var direita: Construto = isto.analisarUnario()
             se direita == nulo {
                 retorna nulo
             }
-
             var noUnario: Construto = Construto("Unario")
+            noUnario.linha = operadorAtual.linha
             noUnario.simboloOperador = operadorAtual
             noUnario.operando = direita
             noUnario.posicaoUnario = "ANTES"
             retorna noUnario
         }
 
-        retorna isto.analisarChamada()
-    }
-
-    analisarExponenciacao(): Construto {
-        var expressao: Construto = isto.analisarUnario()
-        se expressao == nulo {
-            retorna nulo
-        }
-
-        enquanto isto.verificarSeSimboloAtualEIgualA(isto.tipos.EXPONENCIACAO) {
-            var operadorAtual: Simbolo = isto.simboloAnterior()
-            var direita: Construto = isto.analisarExponenciacao()
-            se direita == nulo {
-                retorna nulo
-            }
-
-            var noBinario: Construto = Construto("Binario")
-            noBinario.esquerda = expressao
-            noBinario.simboloOperador = operadorAtual
-            noBinario.direita = direita
-            expressao = noBinario
-        }
-
-        retorna expressao
+        retorna isto.analisarExponenciacao()
     }
 
     analisarFator(): Construto {
-        var expressao: Construto = isto.analisarExponenciacao()
-        se expressao == nulo {
-            retorna nulo
+        var expressao: Construto = isto.analisarUnario()
+        enquanto expressao != nulo e isto.verificarSeSimboloAtualCorresponde([isto.tipos.MULTIPLICACAO, isto.tipos.DIVISAO, isto.tipos.DIVISAO_INTEIRA, isto.tipos.MODULO]) {
+            var simboloOp: Simbolo = isto.simboloAnterior()
+            var direita: Construto = isto.analisarUnario()
+            se direita == nulo { retorna nulo }
+            expressao = isto.criarOperacao("Binario", expressao, simboloOp, direita)
         }
-
-        enquanto isto.verificarSeSimboloAtualCorresponde([
-            isto.tipos.MULTIPLICACAO,
-            isto.tipos.DIVISAO,
-            isto.tipos.DIVISAO_INTEIRA,
-            isto.tipos.MODULO
-        ]) {
-            var operadorAtual: Simbolo = isto.simboloAnterior()
-            var direita: Construto = isto.analisarExponenciacao()
-            se direita == nulo {
-                retorna nulo
-            }
-
-            var noBinario: Construto = Construto("Binario")
-            noBinario.esquerda = expressao
-            noBinario.simboloOperador = operadorAtual
-            noBinario.direita = direita
-            expressao = noBinario
-        }
-
         retorna expressao
     }
 
     analisarTermo(): Construto {
         var expressao: Construto = isto.analisarFator()
-        se expressao == nulo {
-            retorna nulo
-        }
-
-        enquanto isto.verificarSeSimboloAtualCorresponde([isto.tipos.ADICAO, isto.tipos.SUBTRACAO]) {
-            var operadorAtual: Simbolo = isto.simboloAnterior()
+        enquanto expressao != nulo e isto.verificarSeSimboloAtualCorresponde([isto.tipos.ADICAO, isto.tipos.SUBTRACAO]) {
+            var simboloOp: Simbolo = isto.simboloAnterior()
             var direita: Construto = isto.analisarFator()
-            se direita == nulo {
-                retorna nulo
-            }
-
-            var noBinario: Construto = Construto("Binario")
-            noBinario.esquerda = expressao
-            noBinario.simboloOperador = operadorAtual
-            noBinario.direita = direita
-            expressao = noBinario
+            se direita == nulo { retorna nulo }
+            expressao = isto.criarOperacao("Binario", expressao, simboloOp, direita)
         }
+        retorna expressao
+    }
 
+    analisarDeslocamento(): Construto {
+        var expressao: Construto = isto.analisarTermo()
+        enquanto expressao != nulo e isto.verificarSeSimboloAtualCorresponde([isto.tipos.MENOR_MENOR, isto.tipos.MAIOR_MAIOR]) {
+            var simboloOp: Simbolo = isto.simboloAnterior()
+            var direita: Construto = isto.analisarTermo()
+            se direita == nulo { retorna nulo }
+            expressao = isto.criarOperacao("Binario", expressao, simboloOp, direita)
+        }
         retorna expressao
     }
 
     analisarComparacao(): Construto {
-        var expressao: Construto = isto.analisarTermo()
-        se expressao == nulo {
-            retorna nulo
+        var expressao: Construto = isto.analisarDeslocamento()
+        enquanto expressao != nulo e isto.verificarSeSimboloAtualCorresponde([isto.tipos.MAIOR, isto.tipos.MAIOR_IGUAL, isto.tipos.MENOR, isto.tipos.MENOR_IGUAL]) {
+            var simboloOp: Simbolo = isto.simboloAnterior()
+            var direita: Construto = isto.analisarDeslocamento()
+            se direita == nulo { retorna nulo }
+            expressao = isto.criarOperacao("Binario", expressao, simboloOp, direita)
         }
-
-        enquanto isto.verificarSeSimboloAtualCorresponde([
-            isto.tipos.MAIOR,
-            isto.tipos.MAIOR_IGUAL,
-            isto.tipos.MENOR,
-            isto.tipos.MENOR_IGUAL
-        ]) {
-            var operadorAtual: Simbolo = isto.simboloAnterior()
-            var direita: Construto = isto.analisarTermo()
-            se direita == nulo {
-                retorna nulo
-            }
-
-            var noBinario: Construto = Construto("Binario")
-            noBinario.esquerda = expressao
-            noBinario.simboloOperador = operadorAtual
-            noBinario.direita = direita
-            expressao = noBinario
-        }
-
         retorna expressao
     }
 
+    // `x em colecao` e `colecao contem x` (pertinência) ficam no nível da igualdade.
     analisarIgualdade(): Construto {
         var expressao: Construto = isto.analisarComparacao()
-        se expressao == nulo {
-            retorna nulo
-        }
-
-        enquanto isto.verificarSeSimboloAtualCorresponde([isto.tipos.DIFERENTE, isto.tipos.IGUAL_IGUAL]) {
-            var operadorAtual: Simbolo = isto.simboloAnterior()
+        enquanto expressao != nulo e isto.verificarSeSimboloAtualCorresponde([isto.tipos.DIFERENTE, isto.tipos.IGUAL_IGUAL, isto.tipos.EM, isto.tipos.CONTEM]) {
+            var simboloOp: Simbolo = isto.simboloAnterior()
             var direita: Construto = isto.analisarComparacao()
-            se direita == nulo {
-                retorna nulo
-            }
-
-            var noBinario: Construto = Construto("Binario")
-            noBinario.esquerda = expressao
-            noBinario.simboloOperador = operadorAtual
-            noBinario.direita = direita
-            expressao = noBinario
+            se direita == nulo { retorna nulo }
+            expressao = isto.criarOperacao("Binario", expressao, simboloOp, direita)
         }
+        retorna expressao
+    }
 
+    analisarBitE(): Construto {
+        var expressao: Construto = isto.analisarIgualdade()
+        enquanto expressao != nulo e isto.verificarSeSimboloAtualEIgualA(isto.tipos.BIT_AND) {
+            var simboloOp: Simbolo = isto.simboloAnterior()
+            var direita: Construto = isto.analisarIgualdade()
+            se direita == nulo { retorna nulo }
+            expressao = isto.criarOperacao("Binario", expressao, simboloOp, direita)
+        }
+        retorna expressao
+    }
+
+    analisarBitXou(): Construto {
+        var expressao: Construto = isto.analisarBitE()
+        enquanto expressao != nulo e isto.verificarSeSimboloAtualEIgualA(isto.tipos.CIRCUMFLEXO) {
+            var simboloOp: Simbolo = isto.simboloAnterior()
+            var direita: Construto = isto.analisarBitE()
+            se direita == nulo { retorna nulo }
+            expressao = isto.criarOperacao("Binario", expressao, simboloOp, direita)
+        }
+        retorna expressao
+    }
+
+    analisarBitOu(): Construto {
+        var expressao: Construto = isto.analisarBitXou()
+        enquanto expressao != nulo e isto.verificarSeSimboloAtualEIgualA(isto.tipos.BIT_OR) {
+            var simboloOp: Simbolo = isto.simboloAnterior()
+            var direita: Construto = isto.analisarBitXou()
+            se direita == nulo { retorna nulo }
+            expressao = isto.criarOperacao("Binario", expressao, simboloOp, direita)
+        }
         retorna expressao
     }
 
     analisarELogico(): Construto {
-        var expressao: Construto = isto.analisarIgualdade()
-        se expressao == nulo {
-            retorna nulo
+        var expressao: Construto = isto.analisarBitOu()
+        enquanto expressao != nulo e isto.verificarSeSimboloAtualEIgualA(isto.tipos.E) {
+            var simboloOp: Simbolo = isto.simboloAnterior()
+            var direita: Construto = isto.analisarBitOu()
+            se direita == nulo { retorna nulo }
+            expressao = isto.criarOperacao("Logico", expressao, simboloOp, direita)
         }
-
-        enquanto isto.verificarSeSimboloAtualEIgualA(isto.tipos.E) {
-            var operadorAtual: Simbolo = isto.simboloAnterior()
-            var direita: Construto = isto.analisarIgualdade()
-            se direita == nulo {
-                retorna nulo
-            }
-
-            var noLogico: Construto = Construto("Logico")
-            noLogico.esquerda = expressao
-            noLogico.simboloOperador = operadorAtual
-            noLogico.direita = direita
-            expressao = noLogico
-        }
-
         retorna expressao
     }
 
     analisarOuLogico(): Construto {
         var expressao: Construto = isto.analisarELogico()
-        se expressao == nulo {
-            retorna nulo
-        }
-
-        enquanto isto.verificarSeSimboloAtualEIgualA(isto.tipos.OU) {
-            var operadorAtual: Simbolo = isto.simboloAnterior()
+        enquanto expressao != nulo e isto.verificarSeSimboloAtualEIgualA(isto.tipos.OU) {
+            var simboloOp: Simbolo = isto.simboloAnterior()
             var direita: Construto = isto.analisarELogico()
-            se direita == nulo {
-                retorna nulo
-            }
-
-            var noLogico: Construto = Construto("Logico")
-            noLogico.esquerda = expressao
-            noLogico.simboloOperador = operadorAtual
-            noLogico.direita = direita
-            expressao = noLogico
+            se direita == nulo { retorna nulo }
+            expressao = isto.criarOperacao("Logico", expressao, simboloOp, direita)
         }
-
         retorna expressao
     }
 
-    analisarAtribuicao(): Construto {
+    // a ?: b — `b` só quando `a` é nulo.
+    analisarElvis(): Construto {
         var expressao: Construto = isto.analisarOuLogico()
+        enquanto expressao != nulo e isto.verificarSeSimboloAtualEIgualA(isto.tipos.ELVIS) {
+            var simboloOp: Simbolo = isto.simboloAnterior()
+            var direita: Construto = isto.analisarOuLogico()
+            se direita == nulo { retorna nulo }
+            expressao = isto.criarOperacao("Logico", expressao, simboloOp, direita)
+        }
+        retorna expressao
+    }
+
+    // condicao ? seVerdadeiro : seFalso (associa à direita)
+    analisarTernario(): Construto {
+        var condicao: Construto = isto.analisarElvis()
+        se condicao == nulo {
+            retorna nulo
+        }
+        se isto.verificarSeSimboloAtualEIgualA(isto.tipos.INTERROGACAO) {
+            var simboloTernario: Simbolo = isto.simboloAnterior()
+            var seVerdadeiro: Construto = isto.analisarTernario()
+            se seVerdadeiro == nulo { retorna nulo }
+            isto.consumir(isto.tipos.DOIS_PONTOS, "Esperado ':' no simboloOp ternário.")
+            var seFalso: Construto = isto.analisarTernario()
+            se seFalso == nulo { retorna nulo }
+            var noTernario: Construto = Construto("Ternario")
+            noTernario.linha = simboloTernario.linha
+            noTernario.operando = condicao
+            noTernario.esquerda = seVerdadeiro
+            noTernario.direita = seFalso
+            retorna noTernario
+        }
+        retorna condicao
+    }
+
+    analisarAtribuicao(): Construto {
+        var expressao: Construto = isto.analisarTernario()
         se expressao == nulo {
             retorna nulo
         }
@@ -377,9 +704,45 @@ classe AvaliadorSintatico {
             }
 
             var noAtribuicao: Construto = Construto("Atribuicao")
+            noAtribuicao.linha = expressao.linha
             noAtribuicao.alvoAtribuicao = expressao
             noAtribuicao.valorAtribuicao = valor
             retorna noAtribuicao
+        }
+
+        // a += b → a = a + b (o alvo é avaliado duas vezes, o que só importa se o índice
+        // tiver efeitos colaterais).
+        se isto.verificarSeSimboloAtualCorresponde([
+            isto.tipos.MAIS_IGUAL,
+            isto.tipos.MENOS_IGUAL,
+            isto.tipos.MULTIPLICACAO_IGUAL,
+            isto.tipos.DIVISAO_IGUAL,
+            isto.tipos.MODULO_IGUAL
+        ]) {
+            var operadorComposto: Simbolo = isto.simboloAnterior()
+            var valorComposto: Construto = isto.analisarAtribuicao()
+            se valorComposto == nulo {
+                retorna nulo
+            }
+            var tipoBinario: texto = isto.tipos.ADICAO
+            se operadorComposto._tipo == isto.tipos.MENOS_IGUAL { tipoBinario = isto.tipos.SUBTRACAO }
+            se operadorComposto._tipo == isto.tipos.MULTIPLICACAO_IGUAL { tipoBinario = isto.tipos.MULTIPLICACAO }
+            se operadorComposto._tipo == isto.tipos.DIVISAO_IGUAL { tipoBinario = isto.tipos.DIVISAO }
+            se operadorComposto._tipo == isto.tipos.MODULO_IGUAL { tipoBinario = isto.tipos.MODULO }
+
+            var lexemaBinario: texto = operadorComposto.lexema.subtexto(0, operadorComposto.lexema.tamanho() - 1)
+            var simboloBinario: Simbolo = Simbolo(lexemaBinario, tipoBinario, operadorComposto.linha, operadorComposto.hashArquivo)
+            var noOperacao: Construto = Construto("Binario")
+            noOperacao.linha = operadorComposto.linha
+            noOperacao.esquerda = expressao
+            noOperacao.simboloOperador = simboloBinario
+            noOperacao.direita = valorComposto
+
+            var noAtribuicaoComposta: Construto = Construto("Atribuicao")
+            noAtribuicaoComposta.linha = operadorComposto.linha
+            noAtribuicaoComposta.alvoAtribuicao = expressao
+            noAtribuicaoComposta.valorAtribuicao = noOperacao
+            retorna noAtribuicaoComposta
         }
 
         retorna expressao
@@ -395,7 +758,7 @@ classe AvaliadorSintatico {
             retorna nulo
         }
 
-        isto.consumir(isto.tipos.PONTO_E_VIRGULA, "Esperado ';' após expressão.")
+        isto.consumirPontoEVirgulaOpcional()
         var noComando: Declaracao = Declaracao("ComandoExpressao")
         noComando.expressaoComando = expressao
         retorna noComando
@@ -418,8 +781,38 @@ classe AvaliadorSintatico {
         retorna noBloco
     }
 
+    // Anotação de tipo após ':' (`texto`, `número[]`, `dicionário<texto, número>`,
+    // `função<texto>`, nome de classe...). O deldel não verifica tipos: a anotação é lida
+    // e descartada.
+    consumirAnotacaoTipoOpcional() {
+        se nao isto.verificarSeSimboloAtualEIgualA(isto.tipos.DOIS_PONTOS) {
+            retorna
+        }
+        var simboloTipo: Simbolo = isto.simboloAtual()
+        se isto.terminou() ou simboloTipo.lexema == "" {
+            isto.erro(simboloTipo, "Esperado tipo após ':'.")
+            retorna
+        }
+        isto.avancarEDevolverAnterior()
+        // Parâmetros de tipo: <...>, com aninhamento.
+        se isto.verificarSeSimboloAtualEIgualA(isto.tipos.MENOR) {
+            var profundidade: inteiro = 1
+            enquanto profundidade > 0 e nao isto.terminou() {
+                se isto.verificarTipoSimboloAtual(isto.tipos.MENOR) { profundidade = profundidade + 1 }
+                se isto.verificarTipoSimboloAtual(isto.tipos.MAIOR) { profundidade = profundidade - 1 }
+                isto.avancarEDevolverAnterior()
+            }
+        }
+        // Vetores: [] repetido.
+        enquanto isto.verificarTipoSimboloAtual(isto.tipos.COLCHETE_ESQUERDO) e isto.atual + 1 < isto.simbolos.tamanho() e isto.simbolos[isto.atual + 1]._tipo == isto.tipos.COLCHETE_DIREITO {
+            isto.avancarEDevolverAnterior()
+            isto.avancarEDevolverAnterior()
+        }
+    }
+
     analisarDeclaracaoVariavel(): Declaracao {
         var nome: Simbolo = isto.consumir(isto.tipos.IDENTIFICADOR, "Esperado nome da variável.")
+        isto.consumirAnotacaoTipoOpcional()
 
         var inicializador: Construto = nulo
         se isto.verificarSeSimboloAtualEIgualA(isto.tipos.IGUAL) {
@@ -429,7 +822,7 @@ classe AvaliadorSintatico {
             }
         }
 
-        isto.consumir(isto.tipos.PONTO_E_VIRGULA, "Esperado ';' após declaração de variável.")
+        isto.consumirPontoEVirgulaOpcional()
         var noDeclaracaoVariavel: Declaracao = Declaracao("DeclaracaoVariavel")
         noDeclaracaoVariavel.variavelNome = nome
         noDeclaracaoVariavel.variavelInicializador = inicializador
@@ -437,12 +830,11 @@ classe AvaliadorSintatico {
     }
 
     analisarComandoSe(): Declaracao {
-        isto.consumir(isto.tipos.PARENTESE_ESQUERDO, "Esperado '(' após 'se'.")
+        // Parênteses opcionais: `se (x) ...` é lido como uma condição agrupada.
         var condicao: Construto = isto.analisarExpressao()
         se condicao == nulo {
             retorna nulo
         }
-        isto.consumir(isto.tipos.PARENTESE_DIREITO, "Esperado ')' após condição de 'se'.")
 
         var ramoEntao: Declaracao = isto.analisarComando()
         se ramoEntao == nulo {
@@ -465,12 +857,10 @@ classe AvaliadorSintatico {
     }
 
     analisarComandoEnquanto(): Declaracao {
-        isto.consumir(isto.tipos.PARENTESE_ESQUERDO, "Esperado '(' após 'enquanto'.")
         var condicao: Construto = isto.analisarExpressao()
         se condicao == nulo {
             retorna nulo
         }
-        isto.consumir(isto.tipos.PARENTESE_DIREITO, "Esperado ')' após condição de 'enquanto'.")
 
         var corpo: Declaracao = isto.analisarComando()
         se corpo == nulo {
@@ -485,20 +875,154 @@ classe AvaliadorSintatico {
 
     analisarComandoRetornar(): Declaracao {
         var valor: Construto = nulo
-        se nao isto.verificarTipoSimboloAtual(isto.tipos.PONTO_E_VIRGULA) {
+        se nao isto.verificarTipoSimboloAtual(isto.tipos.PONTO_E_VIRGULA) e nao isto.verificarTipoSimboloAtual(isto.tipos.CHAVE_DIREITA) e nao isto.terminou() {
             valor = isto.analisarExpressao()
             se valor == nulo {
                 retorna nulo
             }
         }
 
-        isto.consumir(isto.tipos.PONTO_E_VIRGULA, "Esperado ';' após comando 'retornar'.")
+        isto.consumirPontoEVirgulaOpcional()
         var noRetornar: Declaracao = Declaracao("ComandoRetornar")
         noRetornar.valorRetornar = valor
         retorna noRetornar
     }
 
+    // Marca a linha de início do comando (corpos de `se`/`enquanto` não passam por
+    // analisarDeclaracao).
     analisarComando(): Declaracao {
+        var linhaInicio: número = isto.linhaAtual()
+        var comando: Declaracao = isto.analisarComandoSemLinha()
+        se comando != nulo e comando.linha == 0 {
+            comando.linha = linhaInicio
+        }
+        retorna comando
+    }
+
+    // para cada nome em iteravel corpo
+    // para cada {chave, valor} em dicionario corpo
+    analisarComandoParaCada(): Declaracao {
+        var noParaCada: Declaracao = Declaracao("ComandoParaCada")
+        noParaCada.paraCadaNomeValor = ""
+        se isto.verificarSeSimboloAtualEIgualA(isto.tipos.CHAVE_ESQUERDA) {
+            var primeiroNome: Simbolo = isto.consumir(isto.tipos.IDENTIFICADOR, "Esperado nome da chave em 'para cada {chave, valor}'.")
+            isto.consumir(isto.tipos.VIRGULA, "Esperado ',' entre os nomes em 'para cada {chave, valor}'.")
+            var segundoNome: Simbolo = isto.consumir(isto.tipos.IDENTIFICADOR, "Esperado nome do valor em 'para cada {chave, valor}'.")
+            isto.consumir(isto.tipos.CHAVE_DIREITA, "Esperado '}' após os nomes em 'para cada {chave, valor}'.")
+            noParaCada.paraCadaNome = primeiroNome.lexema
+            noParaCada.paraCadaNomeValor = segundoNome.lexema
+        } senao {
+            var nome: Simbolo = isto.consumir(isto.tipos.IDENTIFICADOR, "Esperado nome da variável de iteração em 'para cada'.")
+            noParaCada.paraCadaNome = nome.lexema
+        }
+        se nao isto.verificarSeSimboloAtualCorresponde([isto.tipos.EM, isto.tipos.DE]) {
+            isto.erro(isto.simboloAtual(), "Esperado 'em' ou 'de' após variável de iteração em 'para cada'.")
+            retorna nulo
+        }
+        var iteravel: Construto = isto.analisarExpressao()
+        se iteravel == nulo {
+            retorna nulo
+        }
+        var corpo: Declaracao = isto.analisarComando()
+        se corpo == nulo {
+            retorna nulo
+        }
+        noParaCada.paraCadaIteravel = iteravel
+        noParaCada.paraCorpo = corpo
+        retorna noParaCada
+    }
+
+    // para (inicializador; condicao; incremento) corpo — parênteses e cada parte opcionais.
+    analisarComandoPara(): Declaracao {
+        se isto.verificarSeSimboloAtualEIgualA(isto.tipos.CADA) {
+            retorna isto.analisarComandoParaCada()
+        }
+
+        var comParenteses: lógico = isto.verificarSeSimboloAtualEIgualA(isto.tipos.PARENTESE_ESQUERDO)
+        var noPara: Declaracao = Declaracao("ComandoPara")
+
+        se isto.verificarSeSimboloAtualEIgualA(isto.tipos.PONTO_E_VIRGULA) {
+            noPara.paraInicializador = nulo
+        } senao se isto.verificarSeSimboloAtualEIgualA(isto.tipos.VARIAVEL) {
+            // analisarDeclaracaoVariavel consome o ';' que separa as partes.
+            noPara.paraInicializador = isto.analisarDeclaracaoVariavel()
+            se noPara.paraInicializador == nulo {
+                retorna nulo
+            }
+        } senao {
+            var expressaoInicial: Construto = isto.analisarExpressao()
+            se expressaoInicial == nulo {
+                retorna nulo
+            }
+            var comandoInicial: Declaracao = Declaracao("ComandoExpressao")
+            comandoInicial.expressaoComando = expressaoInicial
+            noPara.paraInicializador = comandoInicial
+            isto.consumir(isto.tipos.PONTO_E_VIRGULA, "Esperado ';' após o inicializador de 'para'.")
+        }
+
+        noPara.paraCondicao = nulo
+        se nao isto.verificarTipoSimboloAtual(isto.tipos.PONTO_E_VIRGULA) {
+            noPara.paraCondicao = isto.analisarExpressao()
+            se noPara.paraCondicao == nulo {
+                retorna nulo
+            }
+        }
+        isto.consumir(isto.tipos.PONTO_E_VIRGULA, "Esperado ';' após a condição de 'para'.")
+
+        noPara.paraIncremento = nulo
+        se nao isto.verificarTipoSimboloAtual(isto.tipos.PARENTESE_DIREITO) e nao isto.verificarTipoSimboloAtual(isto.tipos.CHAVE_ESQUERDA) {
+            noPara.paraIncremento = isto.analisarExpressao()
+            se noPara.paraIncremento == nulo {
+                retorna nulo
+            }
+        }
+        se comParenteses {
+            isto.consumir(isto.tipos.PARENTESE_DIREITO, "Esperado ')' após as partes de 'para'.")
+        }
+
+        var corpoPara: Declaracao = isto.analisarComando()
+        se corpoPara == nulo {
+            retorna nulo
+        }
+        noPara.paraCorpo = corpoPara
+        retorna noPara
+    }
+
+    analisarComandoSemLinha(): Declaracao {
+        se isto.verificarSeSimboloAtualEIgualA(isto.tipos.TENTE) {
+            retorna isto.analisarComandoTente()
+        }
+
+        se isto.verificarSeSimboloAtualEIgualA(isto.tipos.ASSERCAO) {
+            retorna isto.analisarComandoAssercao()
+        }
+
+        se isto.verificarSeSimboloAtualEIgualA(isto.tipos.FAZER) {
+            retorna isto.analisarComandoFazer()
+        }
+
+        se isto.verificarSeSimboloAtualEIgualA(isto.tipos.ESCOLHA) {
+            retorna isto.analisarComandoEscolha()
+        }
+
+        se isto.verificarSeSimboloAtualEIgualA(isto.tipos.FALHAR) {
+            retorna isto.analisarComandoFalhar()
+        }
+
+        se isto.verificarSeSimboloAtualEIgualA(isto.tipos.PARA) {
+            retorna isto.analisarComandoPara()
+        }
+
+        se isto.verificarSeSimboloAtualCorresponde([isto.tipos.SUSTAR, isto.tipos.QUEBRAR]) {
+            isto.consumirPontoEVirgulaOpcional()
+            retorna Declaracao("ComandoSustar")
+        }
+
+        se isto.verificarSeSimboloAtualEIgualA(isto.tipos.CONTINUA) {
+            isto.consumirPontoEVirgulaOpcional()
+            retorna Declaracao("ComandoContinua")
+        }
+
         se isto.verificarSeSimboloAtualEIgualA(isto.tipos.CHAVE_ESQUERDA) {
             retorna isto.analisarBloco()
         }
@@ -518,48 +1042,469 @@ classe AvaliadorSintatico {
         retorna isto.analisarComandoExpressao()
     }
 
-    analisarDeclaracaoFuncao(): Declaracao {
-        var nome: Simbolo = isto.consumir(isto.tipos.IDENTIFICADOR, "Esperado nome da função.")
-        isto.consumir(isto.tipos.PARENTESE_ESQUERDO, "Esperado '(' após nome da função.")
+    // `(parametros) [: tipo] { corpo }` de funções, métodos e funções anônimas.
+    // O último parâmetro pode ser `...nome` (recebe os argumentos restantes num vetor).
+    analisarRestoFuncao(nome: Simbolo, semCorpo: lógico): Declaracao {
+        isto.consumir(isto.tipos.PARENTESE_ESQUERDO, "Esperado '(' antes dos parâmetros da função.")
 
         var parametros: Simbolo[] = []
+        var padroes: Construto[] = []
+        var variadica: lógico = falso
         se nao isto.verificarTipoSimboloAtual(isto.tipos.PARENTESE_DIREITO) {
             var lerMaisParametros: lógico = verdadeiro
             enquanto lerMaisParametros {
+                se variadica {
+                    isto.erro(isto.simboloAtual(), "O parâmetro '...' deve ser o último.")
+                }
+                se isto.verificarSeSimboloAtualEIgualA(isto.tipos.RETICENCIAS) {
+                    variadica = verdadeiro
+                }
                 var parametro: Simbolo = isto.consumir(isto.tipos.IDENTIFICADOR, "Esperado nome de parâmetro.")
+                isto.consumirAnotacaoTipoOpcional()
                 parametros.adicionar(parametro)
+                // Valor padrão: avaliado na chamada, quando o argumento não é passado.
+                var valorPadrao: Construto = Construto("SemPadrao")
+                se isto.verificarSeSimboloAtualEIgualA(isto.tipos.IGUAL) {
+                    valorPadrao = isto.analisarExpressao()
+                    se valorPadrao == nulo {
+                        retorna nulo
+                    }
+                }
+                padroes.adicionar(valorPadrao)
                 lerMaisParametros = isto.verificarSeSimboloAtualEIgualA(isto.tipos.VIRGULA)
             }
         }
 
         isto.consumir(isto.tipos.PARENTESE_DIREITO, "Esperado ')' após parâmetros da função.")
-        isto.consumir(isto.tipos.CHAVE_ESQUERDA, "Esperado '{' antes do corpo da função.")
-        var corpo: Declaracao = isto.analisarBloco()
-        se corpo == nulo {
-            retorna nulo
+        isto.consumirAnotacaoTipoOpcional()
+        var corpo: Declaracao = nulo
+        se semCorpo e nao isto.verificarTipoSimboloAtual(isto.tipos.CHAVE_ESQUERDA) {
+            isto.consumirPontoEVirgulaOpcional()
+        } senao {
+            isto.consumir(isto.tipos.CHAVE_ESQUERDA, "Esperado '{' antes do corpo da função.")
+            corpo = isto.analisarBloco()
+            se corpo == nulo {
+                retorna nulo
+            }
         }
 
         var noFuncao: Declaracao = Declaracao("DeclaracaoFuncao")
+        noFuncao.linha = nome.linha
         noFuncao.funcaoNome = nome
         noFuncao.funcaoParametros = parametros
         noFuncao.funcaoCorpo = corpo
+        noFuncao.funcaoVariadica = variadica
+        noFuncao.funcaoPadroes = padroes
         retorna noFuncao
     }
 
+    analisarDeclaracaoFuncao(): Declaracao {
+        var nome: Simbolo = isto.consumir(isto.tipos.IDENTIFICADOR, "Esperado nome da função.")
+        retorna isto.analisarRestoFuncao(nome, falso)
+    }
+
+    // funcao(parametros) { corpo } como expressão.
+    analisarFuncaoAnonima(): Construto {
+        var simboloFuncao: Simbolo = isto.simboloAnterior()
+        var nomeAnonimo: Simbolo = Simbolo("", isto.tipos.IDENTIFICADOR, simboloFuncao.linha, simboloFuncao.hashArquivo)
+        var declaracao: Declaracao = isto.analisarRestoFuncao(nomeAnonimo, falso)
+        se declaracao == nulo {
+            retorna nulo
+        }
+        var noFuncao: Construto = Construto("FuncaoAnonima")
+        noFuncao.linha = simboloFuncao.linha
+        noFuncao.funcaoAnonima = declaracao
+        retorna noFuncao
+    }
+
+    eModificadorDeMembro(): lógico {
+        retorna isto.verificarTipoSimboloAtual(isto.tipos.PUBLICO) ou isto.verificarTipoSimboloAtual(isto.tipos.PRIVADO) ou isto.verificarTipoSimboloAtual(isto.tipos.PROTEGIDO) ou isto.verificarTipoSimboloAtual(isto.tipos.ESTATICO)
+    }
+
+    // Nomes separados por vírgula (após `herda`, `implementa` e `mescla`).
+    analisarListaDeNomes(mensagem: texto): texto[] {
+        var nomes: texto[] = []
+        var lerMais: lógico = verdadeiro
+        enquanto lerMais {
+            var nome: Simbolo = isto.consumir(isto.tipos.IDENTIFICADOR, mensagem)
+            nomes.adicionar(nome.lexema)
+            lerMais = isto.verificarSeSimboloAtualEIgualA(isto.tipos.VIRGULA)
+        }
+        retorna nomes
+    }
+
+    // Membros de classe: propriedades, métodos, `operador <símbolo>(...)` e blocos
+    // `abstrato { ... }`. `semCorpo` permite métodos sem corpo (classes abstratas,
+    // estrangeiras e blocos abstratos); os nomes deles vão para `abstratos`.
+    analisarMembrosDeClasse(campos: texto[], metodos: Declaracao[], abstratos: texto[], semCorpo: lógico): lógico {
+        enquanto nao isto.verificarTipoSimboloAtual(isto.tipos.CHAVE_DIREITA) e nao isto.terminou() {
+            enquanto isto.eModificadorDeMembro() {
+                isto.avancarEDevolverAnterior()
+            }
+            se isto.verificarTipoSimboloAtual(isto.tipos.ABSTRATO) e isto.atual + 1 < isto.simbolos.tamanho() e isto.simbolos[isto.atual + 1]._tipo == isto.tipos.CHAVE_ESQUERDA {
+                isto.avancarEDevolverAnterior()
+                isto.avancarEDevolverAnterior()
+                se nao isto.analisarMembrosDeClasse(campos, metodos, abstratos, verdadeiro) { retorna falso }
+                isto.consumir(isto.tipos.CHAVE_DIREITA, "Esperado '}' para fechar o bloco 'abstrato'.")
+            } senao se isto.verificarSeSimboloAtualEIgualA(isto.tipos.OPERADOR) {
+                var simboloDoOperador: Simbolo = isto.avancarEDevolverAnterior()
+                var nomeOperador: Simbolo = Simbolo("operador" + simboloDoOperador.lexema, isto.tipos.IDENTIFICADOR, simboloDoOperador.linha, simboloDoOperador.hashArquivo)
+                var metodoOperador: Declaracao = isto.analisarRestoFuncao(nomeOperador, falso)
+                se metodoOperador == nulo { retorna falso }
+                metodos.adicionar(metodoOperador)
+            } senao {
+                var nomeMembro: Simbolo = isto.consumirNomeMembro()
+                se isto.verificarTipoSimboloAtual(isto.tipos.PARENTESE_ESQUERDO) {
+                    var metodo: Declaracao = isto.analisarRestoFuncao(nomeMembro, semCorpo)
+                    se metodo == nulo { retorna falso }
+                    se metodo.funcaoCorpo == nulo {
+                        abstratos.adicionar(nomeMembro.lexema)
+                    } senao {
+                        metodos.adicionar(metodo)
+                    }
+                } senao {
+                    isto.consumirAnotacaoTipoOpcional()
+                    se isto.verificarTipoSimboloAtual(isto.tipos.IGUAL) {
+                        isto.erro(isto.simboloAtual(), "Valor inicial de propriedade não é permitido em Delégua; atribua no construtor.")
+                        retorna falso
+                    }
+                    isto.consumirPontoEVirgulaOpcional()
+                    campos.adicionar(nomeMembro.lexema)
+                }
+            }
+        }
+        retorna verdadeiro
+    }
+
+    // classe [abstrata] [estrangeira] [estática] Nome [herda Pai] [implementa I1, I2]
+    //        [mescla M1, M2] { membros }
+    analisarDeclaracaoClasse(): Declaracao {
+        var ehAbstrata: lógico = falso
+        var ehEstrangeira: lógico = falso
+        var lerModificadores: lógico = verdadeiro
+        enquanto lerModificadores {
+            se isto.verificarSeSimboloAtualEIgualA(isto.tipos.ABSTRATO) {
+                ehAbstrata = verdadeiro
+            } senao se isto.verificarSeSimboloAtualEIgualA(isto.tipos.ESTRANGEIRA) {
+                ehEstrangeira = verdadeiro
+            } senao se isto.verificarSeSimboloAtualEIgualA(isto.tipos.ESTATICO) {
+                // classe estática: aceita e ignorada.
+            } senao {
+                lerModificadores = falso
+            }
+        }
+        var nome: Simbolo = isto.consumir(isto.tipos.IDENTIFICADOR, "Esperado nome da classe.")
+        var noClasse: Declaracao = Declaracao("DeclaracaoClasse")
+        noClasse.linha = nome.linha
+        noClasse.classeNome = nome
+        noClasse.classeSuperclasse = ""
+        noClasse.classeAbstrata = ehAbstrata
+        noClasse.classeEstrangeira = ehEstrangeira
+        noClasse.classeInterfaces = []
+        noClasse.classeMesclas = []
+        var lerClausulas: lógico = verdadeiro
+        enquanto lerClausulas {
+            se isto.verificarSeSimboloAtualEIgualA(isto.tipos.HERDA) {
+                var superclasses: texto[] = isto.analisarListaDeNomes("Esperado nome da superclasse após 'herda'.")
+                se superclasses.tamanho() > 1 {
+                    isto.erro(isto.simboloAnterior(), "O deldel ainda não suporta herança de várias classes; use 'mescla' para as demais.")
+                    retorna nulo
+                }
+                noClasse.classeSuperclasse = superclasses[0]
+            } senao se isto.verificarSeSimboloAtualEIgualA(isto.tipos.IMPLEMENTA) {
+                noClasse.classeInterfaces = isto.analisarListaDeNomes("Esperado nome da interface após 'implementa'.")
+            } senao se isto.verificarSeSimboloAtualEIgualA(isto.tipos.MESCLA) {
+                noClasse.classeMesclas = isto.analisarListaDeNomes("Esperado nome da classe a mesclar após 'mescla'.")
+            } senao {
+                lerClausulas = falso
+            }
+        }
+        isto.consumir(isto.tipos.CHAVE_ESQUERDA, "Esperado '{' antes do corpo da classe.")
+
+        var campos: texto[] = []
+        var metodos: Declaracao[] = []
+        var abstratos: texto[] = []
+        se nao isto.analisarMembrosDeClasse(campos, metodos, abstratos, ehAbstrata ou ehEstrangeira) {
+            retorna nulo
+        }
+        isto.consumir(isto.tipos.CHAVE_DIREITA, "Esperado '}' após o corpo da classe.")
+        noClasse.classeCampos = campos
+        noClasse.classeMetodos = metodos
+        noClasse.classeAbstratos = abstratos
+        retorna noClasse
+    }
+
+    // interface Nome [herda Outra] { propriedade: tipo  metodo(parametros): tipo }
+    analisarDeclaracaoInterface(): Declaracao {
+        var nome: Simbolo = isto.consumir(isto.tipos.IDENTIFICADOR, "Esperado nome da interface.")
+        var noInterface: Declaracao = Declaracao("DeclaracaoInterface")
+        noInterface.linha = nome.linha
+        noInterface.classeNome = nome
+        noInterface.classeInterfaces = []
+        se isto.verificarSeSimboloAtualEIgualA(isto.tipos.HERDA) {
+            noInterface.classeInterfaces = isto.analisarListaDeNomes("Esperado nome da interface após 'herda'.")
+        }
+        isto.consumir(isto.tipos.CHAVE_ESQUERDA, "Esperado '{' antes do corpo da interface.")
+        var campos: texto[] = []
+        var metodos: Declaracao[] = []
+        var exigidos: texto[] = []
+        se nao isto.analisarMembrosDeClasse(campos, metodos, exigidos, verdadeiro) {
+            retorna nulo
+        }
+        isto.consumir(isto.tipos.CHAVE_DIREITA, "Esperado '}' após o corpo da interface.")
+        noInterface.classeCampos = campos
+        noInterface.classeAbstratos = exigidos
+        retorna noInterface
+    }
+
+    // extensão [global] de Tipo { métodos }
+    analisarDeclaracaoExtensao(): Declaracao {
+        var noExtensao: Declaracao = Declaracao("DeclaracaoExtensao")
+        se isto.verificarTipoSimboloAtual(isto.tipos.IDENTIFICADOR) e isto.simboloAtual().lexema == "global" {
+            isto.avancarEDevolverAnterior()
+        }
+        isto.consumir(isto.tipos.DE, "Esperado 'de' após 'extensão'.")
+        var tipoEstendido: Simbolo = isto.consumirNomeMembro()
+        noExtensao.extensaoTipo = tipoEstendido.lexema
+        isto.consumir(isto.tipos.CHAVE_ESQUERDA, "Esperado '{' antes do corpo da extensão.")
+        var campos: texto[] = []
+        var metodos: Declaracao[] = []
+        var abstratos: texto[] = []
+        se nao isto.analisarMembrosDeClasse(campos, metodos, abstratos, falso) {
+            retorna nulo
+        }
+        isto.consumir(isto.tipos.CHAVE_DIREITA, "Esperado '}' após o corpo da extensão.")
+        noExtensao.classeMetodos = metodos
+        retorna noExtensao
+    }
+
+    // asserção condicao | asserção(condicao) | asserção(condicao, "mensagem")
+    analisarComandoAssercao(): Declaracao {
+        var noAssercao: Declaracao = Declaracao("ComandoAssercao")
+        noAssercao.valorFalhar = nulo
+        se isto.verificarSeSimboloAtualEIgualA(isto.tipos.PARENTESE_ESQUERDO) {
+            noAssercao.condicaoSe = isto.analisarExpressao()
+            se noAssercao.condicaoSe == nulo { retorna nulo }
+            se isto.verificarSeSimboloAtualEIgualA(isto.tipos.VIRGULA) {
+                noAssercao.valorFalhar = isto.analisarExpressao()
+                se noAssercao.valorFalhar == nulo { retorna nulo }
+            }
+            isto.consumir(isto.tipos.PARENTESE_DIREITO, "Esperado ')' após a condição da asserção.")
+        } senao {
+            noAssercao.condicaoSe = isto.analisarExpressao()
+            se noAssercao.condicaoSe == nulo { retorna nulo }
+        }
+        isto.consumirPontoEVirgulaOpcional()
+        retorna noAssercao
+    }
+
+    // fazer comando enquanto condicao (o corpo executa ao menos uma vez)
+    analisarComandoFazer(): Declaracao {
+        var corpo: Declaracao = isto.analisarComando()
+        se corpo == nulo {
+            retorna nulo
+        }
+        isto.consumir(isto.tipos.ENQUANTO, "Esperado 'enquanto' após o corpo de 'fazer'.")
+        var condicao: Construto = isto.analisarExpressao()
+        se condicao == nulo {
+            retorna nulo
+        }
+        isto.consumirPontoEVirgulaOpcional()
+        var noFazer: Declaracao = Declaracao("ComandoFazer")
+        noFazer.corpoEnquanto = corpo
+        noFazer.condicaoEnquanto = condicao
+        retorna noFazer
+    }
+
+    // escolha valor { caso a: ... caso b: caso c: ... padrao: ... }
+    // Sem passagem para o caso seguinte: casos vazios seguidos compartilham o próximo corpo.
+    analisarComandoEscolha(): Declaracao {
+        var valor: Construto = isto.analisarExpressao()
+        se valor == nulo {
+            retorna nulo
+        }
+        isto.consumir(isto.tipos.CHAVE_ESQUERDA, "Esperado '{' após o valor de 'escolha'.")
+        var casos: Declaracao[] = []
+        var valoresPendentes: Construto[] = []
+        var temPadrao: lógico = falso
+        enquanto nao isto.verificarTipoSimboloAtual(isto.tipos.CHAVE_DIREITA) e nao isto.terminou() {
+            var ehPadrao: lógico = falso
+            se isto.verificarSeSimboloAtualEIgualA(isto.tipos.CASO) {
+                var valorCaso: Construto = isto.analisarExpressao()
+                se valorCaso == nulo {
+                    retorna nulo
+                }
+                valoresPendentes.adicionar(valorCaso)
+            } senao se isto.verificarSeSimboloAtualEIgualA(isto.tipos.PADRAO) {
+                se temPadrao {
+                    isto.erro(isto.simboloAnterior(), "'escolha' com mais de um 'padrao'.")
+                }
+                ehPadrao = verdadeiro
+                temPadrao = verdadeiro
+            } senao {
+                isto.erro(isto.simboloAtual(), "Esperado 'caso' ou 'padrao' em 'escolha'.")
+                retorna nulo
+            }
+            isto.consumir(isto.tipos.DOIS_PONTOS, "Esperado ':' após 'caso' ou 'padrao'.")
+
+            var declaracoes: Declaracao[] = []
+            enquanto nao isto.verificarTipoSimboloAtual(isto.tipos.CASO) e nao isto.verificarTipoSimboloAtual(isto.tipos.PADRAO) e nao isto.verificarTipoSimboloAtual(isto.tipos.CHAVE_DIREITA) e nao isto.terminou() {
+                var declaracao: Declaracao = isto.analisarDeclaracao()
+                se declaracao == nulo {
+                    retorna nulo
+                }
+                declaracoes.adicionar(declaracao)
+            }
+            // Caso sem corpo: os valores passam para o próximo.
+            se declaracoes.tamanho() > 0 ou ehPadrao {
+                var corpo: Declaracao = Declaracao("ComandoBloco")
+                corpo.blocoDeclaracoes = declaracoes
+                var noCaso: Declaracao = Declaracao("CasoEscolha")
+                noCaso.casoValores = valoresPendentes
+                noCaso.casoPadrao = ehPadrao
+                noCaso.casoCorpo = corpo
+                casos.adicionar(noCaso)
+                valoresPendentes = []
+            }
+        }
+        isto.consumir(isto.tipos.CHAVE_DIREITA, "Esperado '}' após os casos de 'escolha'.")
+        var noEscolha: Declaracao = Declaracao("ComandoEscolha")
+        noEscolha.escolhaValor = valor
+        noEscolha.escolhaCasos = casos
+        retorna noEscolha
+    }
+
+    // tente { ... } [pegue [(nome[: Tipo])] { ... }]* [finalmente { ... }]
+    // Vale o primeiro `pegue` cujo tipo corresponde ao erro; sem tipo, qualquer erro.
+    analisarComandoTente(): Declaracao {
+        var noTente: Declaracao = Declaracao("ComandoTente")
+        isto.consumir(isto.tipos.CHAVE_ESQUERDA, "Esperado '{' após 'tente'.")
+        noTente.tenteCorpo = isto.analisarBloco()
+        se noTente.tenteCorpo == nulo {
+            retorna nulo
+        }
+        var clausulas: Declaracao[] = []
+        enquanto isto.verificarSeSimboloAtualEIgualA(isto.tipos.PEGUE) {
+            var clausula: Declaracao = Declaracao("ClausulaPegue")
+            clausula.pegueNome = ""
+            clausula.pegueTipo = ""
+            se isto.verificarSeSimboloAtualEIgualA(isto.tipos.PARENTESE_ESQUERDO) {
+                var nomeErro: Simbolo = isto.consumir(isto.tipos.IDENTIFICADOR, "Esperado nome da variável do erro em 'pegue'.")
+                clausula.pegueNome = nomeErro.lexema
+                se isto.verificarSeSimboloAtualEIgualA(isto.tipos.DOIS_PONTOS) {
+                    var tipoErro: Simbolo = isto.consumirNomeMembro()
+                    clausula.pegueTipo = tipoErro.lexema
+                }
+                isto.consumir(isto.tipos.PARENTESE_DIREITO, "Esperado ')' após o nome do erro em 'pegue'.")
+            }
+            isto.consumir(isto.tipos.CHAVE_ESQUERDA, "Esperado '{' após 'pegue'.")
+            clausula.pegueCorpo = isto.analisarBloco()
+            se clausula.pegueCorpo == nulo {
+                retorna nulo
+            }
+            clausulas.adicionar(clausula)
+        }
+        noTente.pegueClausulas = clausulas
+        noTente.finalmenteCorpo = nulo
+        se isto.verificarSeSimboloAtualEIgualA(isto.tipos.FINALMENTE) {
+            isto.consumir(isto.tipos.CHAVE_ESQUERDA, "Esperado '{' após 'finalmente'.")
+            noTente.finalmenteCorpo = isto.analisarBloco()
+            se noTente.finalmenteCorpo == nulo {
+                retorna nulo
+            }
+        }
+        se clausulas.tamanho() == 0 e noTente.finalmenteCorpo == nulo {
+            isto.erro(isto.simboloAtual(), "Esperado 'pegue' ou 'finalmente' após 'tente'.")
+            retorna nulo
+        }
+        retorna noTente
+    }
+
+    analisarComandoFalhar(): Declaracao {
+        var valor: Construto = isto.analisarExpressao()
+        se valor == nulo {
+            retorna nulo
+        }
+        isto.consumirPontoEVirgulaOpcional()
+        var noFalhar: Declaracao = Declaracao("ComandoFalhar")
+        noFalhar.valorFalhar = valor
+        retorna noFalhar
+    }
+
+    // importar tudo como nome de "caminho"
+    // importar { a, b } de "caminho"
+    // (`importar("caminho")` é expressão: ver analisarImportarComoExpressao.)
+    analisarDeclaracaoImportar(): Declaracao {
+        var noImportar: Declaracao = Declaracao("DeclaracaoImportar")
+        noImportar.importarAlias = ""
+        noImportar.importarNomes = []
+        se isto.verificarSeSimboloAtualEIgualA(isto.tipos.TUDO) {
+            isto.consumir(isto.tipos.COMO, "Esperado 'como' após 'importar tudo'.")
+            var alias: Simbolo = isto.consumir(isto.tipos.IDENTIFICADOR, "Esperado nome após 'importar tudo como'.")
+            noImportar.importarAlias = alias.lexema
+        } senao se isto.verificarSeSimboloAtualEIgualA(isto.tipos.CHAVE_ESQUERDA) {
+            var nomes: texto[] = []
+            enquanto nao isto.verificarTipoSimboloAtual(isto.tipos.CHAVE_DIREITA) e nao isto.terminou() {
+                var nome: Simbolo = isto.consumir(isto.tipos.IDENTIFICADOR, "Esperado nome a importar entre '{' e '}'.")
+                nomes.adicionar(nome.lexema)
+                se nao isto.verificarSeSimboloAtualEIgualA(isto.tipos.VIRGULA) {
+                    sustar
+                }
+            }
+            isto.consumir(isto.tipos.CHAVE_DIREITA, "Esperado '}' após os nomes importados.")
+            noImportar.importarNomes = nomes
+        } senao {
+            isto.erro(isto.simboloAtual(), "Esperado 'tudo como nome' ou '{ nomes }' após 'importar'.")
+            retorna nulo
+        }
+        isto.consumir(isto.tipos.DE, "Esperado 'de' antes do caminho em 'importar'.")
+        var caminho: Simbolo = isto.consumir(isto.tipos.TEXTO, "Esperado caminho (texto) em 'importar'.")
+        noImportar.importarCaminho = caminho.lexema
+        isto.consumirPontoEVirgulaOpcional()
+        retorna noImportar
+    }
+
     analisarDeclaracao(): Declaracao {
-        se isto.verificarSeSimboloAtualEIgualA(isto.tipos.FUNCAO) {
-            retorna isto.analisarDeclaracaoFuncao()
+        var linhaInicio: número = isto.linhaAtual()
+        var declaracao: Declaracao = nulo
+        se isto.verificarTipoSimboloAtual(isto.tipos.IMPORTAR) e isto.atual + 1 < isto.simbolos.tamanho() e isto.simbolos[isto.atual + 1]._tipo != isto.tipos.PARENTESE_ESQUERDO {
+            isto.avancarEDevolverAnterior()
+            declaracao = isto.analisarDeclaracaoImportar()
+        } senao se isto.verificarTipoSimboloAtual(isto.tipos.FUNCAO) e isto.atual + 1 < isto.simbolos.tamanho() e isto.simbolos[isto.atual + 1]._tipo == isto.tipos.IDENTIFICADOR {
+            isto.avancarEDevolverAnterior()
+            declaracao = isto.analisarDeclaracaoFuncao()
+        } senao se isto.verificarSeSimboloAtualEIgualA(isto.tipos.CLASSE) {
+            declaracao = isto.analisarDeclaracaoClasse()
+        } senao se isto.verificarSeSimboloAtualEIgualA(isto.tipos.INTERFACE) {
+            declaracao = isto.analisarDeclaracaoInterface()
+        } senao se isto.verificarSeSimboloAtualEIgualA(isto.tipos.EXTENSAO) {
+            declaracao = isto.analisarDeclaracaoExtensao()
+        } senao se isto.verificarSeSimboloAtualEIgualA(isto.tipos.VARIAVEL) {
+            declaracao = isto.analisarDeclaracaoVariavel()
+        } senao se isto.verificarSeSimboloAtualEIgualA(isto.tipos.CONSTANTE) {
+            declaracao = isto.analisarDeclaracaoVariavel()
+            se declaracao != nulo { declaracao.noh = "DeclaracaoConstante" }
+        } senao {
+            declaracao = isto.analisarComando()
         }
-
-        se isto.verificarSeSimboloAtualEIgualA(isto.tipos.VARIAVEL) {
-            retorna isto.analisarDeclaracaoVariavel()
+        se declaracao != nulo e declaracao.linha == 0 {
+            declaracao.linha = linhaInicio
         }
-
-        retorna isto.analisarComando()
+        retorna declaracao
     }
 
     analisar(simbolos: Simbolo[]): RetornoAvaliadorSintatico {
-        isto.simbolos = simbolos
+        // Comentários chegam do lexador como símbolos; não fazem parte da gramática.
+        var simbolosUteis: Simbolo[] = []
+        var indiceSimbolo: inteiro = 0
+        enquanto indiceSimbolo < simbolos.tamanho() {
+            var simbolo: Simbolo = simbolos[indiceSimbolo]
+            se simbolo._tipo != isto.tipos.COMENTARIO e simbolo._tipo != isto.tipos.LINHA_COMENTARIO {
+                simbolosUteis.adicionar(simbolo)
+            }
+            indiceSimbolo = indiceSimbolo + 1
+        }
+        isto.simbolos = simbolosUteis
         isto.erros = []
         isto.atual = 0
 
@@ -580,6 +1525,7 @@ classe AvaliadorSintatico {
         para cada erro em isto.erros {
             retorno.erros.adicionar(erro.paraTexto())
         }
+        retorno.errosDetalhados = isto.erros
         retorna retorno
     }
 

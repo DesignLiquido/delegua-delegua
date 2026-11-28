@@ -1,0 +1,18 @@
+importar { incrementar } de "./contador.delegua"
+
+var pi = 3
+
+// Função auxiliar do módulo: visível às funções do módulo, mesmo chamadas de fora.
+funcao quadrado(x) {
+    retorna x * x
+}
+
+funcao areaCirculo(raio) {
+    incrementar(1)
+    retorna pi * quadrado(raio)
+}
+
+funcao fatorial(n) {
+    se n <= 1 { retorna 1 }
+    retorna n * fatorial(n - 1)
+}

@@ -1,0 +1,3 @@
+funcao saudar(nome) {
+    retorna "Olá, " + nome + "!"
+}

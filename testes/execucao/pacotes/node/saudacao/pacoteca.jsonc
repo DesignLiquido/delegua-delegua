@@ -1,0 +1,7 @@
+{
+  // Pacote de teste para a resolução de pacotes da Pacoteca.
+  "nome": "saudacao",
+  "versao": "0.1.0",
+  "realizacoes": ["node"],
+  "pontoDeEntrada": "fontes/saudacao.delegua"
+}

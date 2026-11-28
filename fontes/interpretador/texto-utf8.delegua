@@ -1,0 +1,156 @@
+// Operações de texto por caractere sobre textos UTF-8.
+//
+// No interpretador compilado, as primitivas de texto do hospedeiro trabalham com bytes:
+// "ação".tamanho() é 6 e "ação"[1] é um byte solto. Delégua conta caracteres (4).
+// Esta classe converte posições de caractere em posições de byte. Textos só com ASCII
+// (o caso comum) usam as primitivas do hospedeiro diretamente.
+//
+// Um byte de continuação UTF-8 está entre 0x80 e 0xBF. Como não há literal de byte, os
+// limites vêm de caracteres conhecidos: "À" é C3 80 e "¿" é C2 BF.
+classe TextoUtf8 {
+    inicioContinuacao: texto
+    fimContinuacao: texto
+
+    construtor() {
+        var a: texto = "À"
+        var b: texto = "¿"
+        isto.inicioContinuacao = a[1]
+        isto.fimContinuacao = b[1]
+    }
+
+    // Byte (texto de um byte) maior ou igual a 0x80: parte de um caractere não ASCII.
+    ehByteNaoAscii(byte: texto): lógico {
+        retorna byte >= isto.inicioContinuacao
+    }
+
+    ehContinuacao(byte: texto): lógico {
+        retorna byte >= isto.inicioContinuacao e byte <= isto.fimContinuacao
+    }
+
+    ehAscii(valor: texto): lógico {
+        var i: inteiro = 0
+        var tamanhoBytes: inteiro = valor.tamanho()
+        enquanto i < tamanhoBytes {
+            var byte: texto = valor[i]
+            se isto.ehByteNaoAscii(byte) { retorna falso }
+            i = i + 1
+        }
+        retorna verdadeiro
+    }
+
+    caracteres(valor: texto): texto[] {
+        var resultado: texto[] = []
+        var atual: texto = ""
+        var i: inteiro = 0
+        var tamanhoBytes: inteiro = valor.tamanho()
+        enquanto i < tamanhoBytes {
+            var byte: texto = valor[i]
+            se isto.ehContinuacao(byte) e atual != "" {
+                atual = atual + byte
+            } senao {
+                se atual != "" { resultado.adicionar(atual) }
+                atual = byte
+            }
+            i = i + 1
+        }
+        se atual != "" { resultado.adicionar(atual) }
+        retorna resultado
+    }
+
+    tamanho(valor: texto): inteiro {
+        var contagem: inteiro = 0
+        var i: inteiro = 0
+        var tamanhoBytes: inteiro = valor.tamanho()
+        enquanto i < tamanhoBytes {
+            var byte: texto = valor[i]
+            se nao isto.ehContinuacao(byte) { contagem = contagem + 1 }
+            i = i + 1
+        }
+        retorna contagem
+    }
+
+    // Posição em bytes do caractere `indiceCaractere` (o tamanho em bytes, se passar do fim).
+    posicaoByte(valor: texto, indiceCaractere: inteiro): inteiro {
+        var contagem: inteiro = 0
+        var i: inteiro = 0
+        var tamanhoBytes: inteiro = valor.tamanho()
+        enquanto i < tamanhoBytes {
+            var byte: texto = valor[i]
+            se nao isto.ehContinuacao(byte) {
+                se contagem == indiceCaractere { retorna i }
+                contagem = contagem + 1
+            }
+            i = i + 1
+        }
+        retorna tamanhoBytes
+    }
+
+    // Posição em bytes do início de cada caractere, mais o tamanho em bytes no fim.
+    posicoesBytes(valor: texto): inteiro[] {
+        var resultado: inteiro[] = []
+        var i: inteiro = 0
+        var tamanhoBytes: inteiro = valor.tamanho()
+        enquanto i < tamanhoBytes {
+            var byte: texto = valor[i]
+            se nao isto.ehContinuacao(byte) { resultado.adicionar(i) }
+            i = i + 1
+        }
+        resultado.adicionar(tamanhoBytes)
+        retorna resultado
+    }
+
+    // Índice de caractere correspondente a uma posição em bytes.
+    indiceCaractere(valor: texto, posicaoBytes: inteiro): inteiro {
+        retorna isto.tamanho(valor.subtexto(0, posicaoBytes))
+    }
+
+    // Caracteres de `inicio` (inclusive) a `fim` (exclusive), com índices já normalizados.
+    subtexto(valor: texto, inicio: inteiro, fim: inteiro): texto {
+        se fim <= inicio { retorna "" }
+        var inicioBytes: inteiro = isto.posicaoByte(valor, inicio)
+        var fimBytes: inteiro = isto.posicaoByte(valor, fim)
+        retorna valor.subtexto(inicioBytes, fimBytes)
+    }
+
+    // As primitivas do hospedeiro só convertem letras ASCII; as acentuadas do latim são
+    // convertidas aqui (o `substituir` do hospedeiro troca todas as ocorrências).
+    minusculasAcentuadas(): texto[] {
+        retorna ["á", "à", "â", "ã", "ä", "é", "è", "ê", "ë", "í", "ì", "î", "ï", "ó", "ò", "ô", "õ", "ö", "ú", "ù", "û", "ü", "ç", "ñ"]
+    }
+
+    maiusculasAcentuadas(): texto[] {
+        retorna ["Á", "À", "Â", "Ã", "Ä", "É", "È", "Ê", "Ë", "Í", "Ì", "Î", "Ï", "Ó", "Ò", "Ô", "Õ", "Ö", "Ú", "Ù", "Û", "Ü", "Ç", "Ñ"]
+    }
+
+    maiusculo(valor: texto): texto {
+        var resultado: texto = valor.maiusculo()
+        var origem: texto[] = isto.minusculasAcentuadas()
+        var destino: texto[] = isto.maiusculasAcentuadas()
+        var i: inteiro = 0
+        enquanto i < origem.tamanho() {
+            resultado = resultado.substituir(origem[i], destino[i])
+            i = i + 1
+        }
+        retorna resultado
+    }
+
+    minusculo(valor: texto): texto {
+        var resultado: texto = valor.minusculo()
+        var origem: texto[] = isto.maiusculasAcentuadas()
+        var destino: texto[] = isto.minusculasAcentuadas()
+        var i: inteiro = 0
+        enquanto i < origem.tamanho() {
+            resultado = resultado.substituir(origem[i], destino[i])
+            i = i + 1
+        }
+        retorna resultado
+    }
+
+    // Índice (em caracteres) da primeira ocorrência a partir de `inicio`, ou -1.
+    encontrar(valor: texto, procurado: texto, inicio: inteiro): inteiro {
+        var inicioBytes: inteiro = isto.posicaoByte(valor, inicio)
+        var posicao: inteiro = valor.encontrar(procurado, inicioBytes)
+        se posicao < 0 { retorna -1 }
+        retorna isto.indiceCaractere(valor, posicao)
+    }
+}

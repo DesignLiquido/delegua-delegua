@@ -1,0 +1,3 @@
+importar { dividirLista } de "./modulos/falha.delegua"
+escreva("antes")
+dividirLista([1])

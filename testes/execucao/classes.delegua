@@ -1,0 +1,64 @@
+// Classes: propriedades, construtor, métodos, isto, herança, super, encadeamento,
+// propriedade que guarda uma função e igualdade por referência.
+classe Animal {
+    nome: texto
+    patas: inteiro
+
+    construtor(nome: texto) {
+        isto.nome = nome
+        isto.patas = 4
+    }
+
+    falar(): texto {
+        retorna isto.nome + " faz som"
+    }
+
+    descrever(): texto {
+        retorna isto.falar() + " e tem " + texto(isto.patas) + " patas"
+    }
+}
+
+classe Cachorro herda Animal {
+    raca: texto
+
+    construtor(nome: texto, raca: texto) {
+        super(nome)
+        isto.raca = raca
+    }
+
+    falar(): texto {
+        retorna super.falar() + " e late"
+    }
+}
+
+var rex = Cachorro("Rex", "vira-lata")
+escreva(rex.descrever())
+escreva(rex.nome, rex.raca, rex.patas, tipo de rex)
+rex.patas = 3
+escreva(rex.descrever())
+escreva(rex)
+
+classe Resposta {
+    statusHttp: qualquer
+    mensagem: qualquer
+
+    status(codigo) {
+        isto.statusHttp = codigo
+        retorna isto
+    }
+
+    enviar(mensagem) {
+        isto.mensagem = mensagem
+        retorna isto
+    }
+}
+var resposta = Resposta()
+resposta.status(201).enviar("criado")
+escreva(resposta.statusHttp, resposta.mensagem, resposta.status(200) == resposta, Resposta() == resposta)
+
+classe ComFuncao {
+    acao: qualquer
+}
+var objeto = ComFuncao()
+objeto.acao = funcao(x) { retorna x + 1 }
+escreva(objeto.acao(41))

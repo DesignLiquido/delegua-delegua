@@ -32,6 +32,68 @@ classe Declaracao {
     funcaoNome: Simbolo
     funcaoParametros: Simbolo[]
     funcaoCorpo: Declaracao
+    // O último parâmetro é `...nome` e recebe os argumentos restantes num vetor.
+    funcaoVariadica: lógico
+    // Valor padrão de cada parâmetro (Construto "SemPadrao" quando não há).
+    funcaoPadroes: Construto[]
+
+    // ComandoPara: para (inicializador; condicao; incremento) corpo — partes opcionais nulas
+    paraInicializador: Declaracao
+    paraCondicao: Construto
+    paraIncremento: Construto
+    paraCorpo: Declaracao
+
+    // ComandoParaCada: para cada nome em iteravel corpo, ou para cada {nome, nomeValor} em ...
+    // (nomeValor vazio quando não há desestruturação). O corpo fica em paraCorpo.
+    paraCadaNome: texto
+    paraCadaNomeValor: texto
+    paraCadaIteravel: Construto
+
+    // ComandoSustar / ComandoContinua não têm campos.
+
+    // DeclaracaoImportar: importar tudo como alias de "caminho" (importarAlias) ou
+    // importar { a, b } de "caminho" (importarNomes); só um dos dois é usado.
+    importarCaminho: texto
+    importarAlias: texto
+    importarNomes: texto[]
+
+    // DeclaracaoClasse: classe Nome [herda Pai] { campos; construtor; métodos }
+    // (os métodos são DeclaracaoFuncao; o construtor se chama "construtor").
+    classeNome: Simbolo
+    classeSuperclasse: texto
+    classeCampos: texto[]
+    classeMetodos: Declaracao[]
+    classeAbstrata: lógico
+    classeEstrangeira: lógico
+    // Métodos sem corpo (classes abstratas/estrangeiras; em interfaces, os exigidos).
+    classeAbstratos: texto[]
+    classeInterfaces: texto[]
+    classeMesclas: texto[]
+
+    // DeclaracaoInterface usa classeNome, classeCampos, classeAbstratos e classeInterfaces
+    // (interfaces herdadas). DeclaracaoExtensao: extensaoTipo e classeMetodos.
+    extensaoTipo: texto
+
+    // ComandoTente: tente corpo, cláusulas pegue (ClausulaPegue) e finalmente opcional.
+    tenteCorpo: Declaracao
+    pegueClausulas: Declaracao[]
+    finalmenteCorpo: Declaracao
+    // ClausulaPegue: pegue (nome: Tipo) corpo; nome e tipo vazios quando ausentes.
+    pegueNome: texto
+    pegueTipo: texto
+    pegueCorpo: Declaracao
+
+    // ComandoFazer usa corpoEnquanto e condicaoEnquanto.
+
+    // ComandoEscolha: escolha valor { casos }. CasoEscolha: valores (vazio no padrao).
+    escolhaValor: Construto
+    escolhaCasos: Declaracao[]
+    casoValores: Construto[]
+    casoPadrao: lógico
+    casoCorpo: Declaracao
+
+    // ComandoFalhar: falhar valor
+    valorFalhar: Construto
 
     construtor(noh: texto) {
         isto.noh = noh

@@ -5,8 +5,8 @@
       "name": "Depurar este projeto",
       "type": "lldb",
       "request": "launch",
-      "program": "${workspaceFolder}/fontes/delegua.exe",
-      "args": [],
+      "program": "${workspaceFolder}/fontes/deldel.exe",
+      "args": ["./exemplos/variaveis.delegua"],
       "cwd": "${workspaceFolder}",
       "stopOnEntry": false
     }

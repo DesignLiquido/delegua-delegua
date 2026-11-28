@@ -1,0 +1,4 @@
+funcao f(d) {
+    retorna d.inexistente()
+}
+f({})

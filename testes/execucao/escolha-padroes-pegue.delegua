@@ -1,0 +1,46 @@
+// escolha (casos agrupados, padrao, retorna), valores padrão de parâmetros e pegue com tipo.
+funcao classificar(x) {
+    escolha x {
+        caso 1:
+            escreva("um")
+        caso 2:
+        caso 3:
+            escreva("dois ou três")
+        caso "a":
+            escreva("letra")
+            retorna "saiu"
+        padrao:
+            escreva("outro")
+    }
+    retorna "fim"
+}
+escreva(classificar(1), classificar(2), classificar(3), classificar("a"), classificar(9))
+funcao saudar(nome = "mundo", pontuacao = "!") { retorna "Olá, " + nome + pontuacao }
+escreva(saudar(), saudar("Ana"), saudar("Ana", "?"))
+classe Conta {
+    saldo: número
+    titular: texto
+    construtor() { isto.saldo = 10
+ isto.titular = "anônimo" }
+    depositar(valor = 5) { isto.saldo = isto.saldo + valor }
+}
+var c = Conta()
+c.depositar()
+c.depositar(1)
+escreva(c.saldo, c.titular)
+classe ErroA { mensagem: texto }
+classe ErroB { mensagem: texto }
+funcao testar(qual) {
+    tente {
+        se qual == "a" { falhar ErroA() }
+        se qual == "b" { falhar ErroB() }
+        falhar "texto"
+    } pegue (erro: ErroA) {
+        retorna "pegou A"
+    } pegue (erro: ErroB) {
+        retorna "pegou B"
+    } pegue (erro) {
+        retorna "pegou outro"
+    }
+}
+escreva(testar("a"), testar("b"), testar("c"))

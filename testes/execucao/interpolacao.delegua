@@ -1,0 +1,8 @@
+// Interpolação de textos e acesso a chaves de dicionário com ponto.
+var d = {"a": {"b": 5}, "lista": [1, 2]}
+escreva(d.a.b, d.lista, d.inexistente)
+d.c = 3
+escreva(d["c"])
+var nome = "Ana"
+escreva("Olá, ${nome}! ${1 + 2} ${d.a.b} fim")
+escreva("sem interpolação $ {x} ${")

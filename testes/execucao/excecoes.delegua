@@ -1,0 +1,90 @@
+// tente / pegue / finalmente / falhar: erros de execução e de `falhar`, objetos lançados,
+// erros vindos de funções e módulos, relançamento e estado restaurado depois do erro.
+importar { dividirLista } de "./modulos/falha.delegua"
+
+tente {
+    falhar "ruim"
+} pegue (erro) {
+    escreva(erro, "|", erro.mensagem, tipo de erro)
+}
+
+tente {
+    var v = [1]
+    escreva(v[3])
+} pegue (erro) {
+    escreva("capturado:", erro.mensagem)
+} finalmente {
+    escreva("finalmente 1")
+}
+
+tente {
+    falhar "sem nome"
+} pegue {
+    escreva("pegue sem variável")
+}
+
+funcao profunda(n) {
+    se n == 0 { falhar "no fundo" }
+    retorna profunda(n - 1)
+}
+var depois = "antes"
+tente {
+    profunda(5)
+} pegue (erro) {
+    depois = "capturado: " + erro.mensagem
+}
+escreva(depois)
+
+tente {
+    dividirLista([1])
+} pegue (erro) {
+    escreva("do módulo:", erro.mensagem)
+}
+
+classe ErroValidacao {
+    mensagem: texto
+    campo: texto
+    construtor(campo) {
+        isto.campo = campo
+        isto.mensagem = "Campo inválido: " + campo
+    }
+}
+tente {
+    falhar ErroValidacao("email")
+} pegue (erro) {
+    escreva(erro.campo, erro.mensagem, tipo de erro)
+}
+
+funcao relancar() {
+    tente {
+        falhar "interno"
+    } finalmente {
+        escreva("finalmente sem pegue")
+    }
+}
+tente {
+    relancar()
+} pegue (erro) {
+    escreva("relançado:", erro.mensagem)
+}
+
+funcao comRetorno() {
+    tente {
+        retorna "do tente"
+    } finalmente {
+        escreva("finalmente com retorno")
+    }
+}
+escreva(comRetorno())
+
+tente {
+    tente {
+        falhar "primeiro"
+    } pegue (erro) {
+        falhar "segundo, depois de " + erro.mensagem
+    }
+} pegue (erro) {
+    escreva(erro.mensagem)
+}
+var aindaFunciona = [1, 2, 3]
+escreva(aindaFunciona.tamanho())

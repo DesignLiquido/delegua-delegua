@@ -35,9 +35,13 @@ classe Lexador {
         retorna caractere >= "0" e caractere <= "9"
     }
 
+    // `caractere` é um byte: o código é lido byte a byte, então letras acentuadas chegam
+    // como dois bytes UTF-8, ambos >= 0x80. Todo byte não ASCII é aceito como parte de
+    // identificador ("À" é C3 80, então "À"[1] é o byte 0x80).
     eAlfabeto(caractere: texto): lógico {
-        var acentuacoes: texto[] = ["á", "Á", "ã", "Ã", "â", "Â", "à", "À", "é", "É", "ê", "Ê", "í", "Í", "ó", "Ó", "õ", "Õ", "ô", "Ô", "ú", "Ú", "ç", "Ç", "_"]
-        retorna (caractere >= "a" e caractere <= "z") ou (caractere >= "A" e caractere <= "Z") ou acentuacoes.inclui(caractere)
+        var referencia: texto = "À"
+        var primeiroNaoAscii: texto = referencia[1]
+        retorna (caractere >= "a" e caractere <= "z") ou (caractere >= "A" e caractere <= "Z") ou caractere == "_" ou caractere >= primeiroNaoAscii
     }
 
     eAlfabetoOuDigito(caractere: texto): lógico {
@@ -122,13 +126,17 @@ classe Lexador {
     }
 
     analisarTexto(delimitador: texto): nulo {
+        var linhaInicio: inteiro = isto.linha
         var valor: texto = ""
         enquanto nao isto.eFinalDoCodigo() {
             var caractere: texto = isto.simboloAtual()
 
             se caractere == delimitador {
                 isto.avancar()
-                isto.adicionarSimbolo(isto.tipos.TEXTO, valor)
+                // Direto, sem adicionarSimbolo: lá um lexema vazio é trocado pelo trecho do
+                // código, o que faria de "" um texto com as duas aspas.
+                var simboloTexto: Simbolo = Simbolo(valor, isto.tipos.TEXTO, isto.linha + 1, isto.hashArquivo)
+                isto.simbolos.adicionar(simboloTexto)
                 retorna
             }
 
@@ -170,7 +178,7 @@ classe Lexador {
             }
         }
 
-        var novoErro: ErroLexador = ErroLexador("Texto não finalizado.", isto.linha + 1)
+        var novoErro: ErroLexador = ErroLexador("Texto não finalizado.", linhaInicio + 1)
         isto.erros.adicionar(novoErro)
     }
 

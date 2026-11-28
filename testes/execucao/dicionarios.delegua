@@ -1,0 +1,31 @@
+// Dicionários: literais, índice, atribuição, ordem de inserção e primitivas.
+var d = {"a": 1, "b": "t", "c": [1, 2], 3: falso}
+escreva(d)
+escreva(d.tamanho(), d["a"], d["b"], d[3], d["inexistente"])
+escreva(d.chaves(), d.valores())
+escreva(d.contem("a"), d.contem("z"))
+
+d["novo"] = {}
+d["novo"]["interno"] = [9]
+d["novo"]["interno"][0] = 8
+escreva(d["novo"])
+
+var mesmo = d
+mesmo["a"] = 100
+escreva(d["a"])
+
+escreva(d.remover("b"), d.remover("b"), d.chaves())
+
+var contagem = {}
+var palavras = "um dois um tres um".dividir(" ")
+var i = 0
+enquanto i < palavras.tamanho() {
+    var palavra = palavras[i]
+    se contagem.contem(palavra) {
+        contagem[palavra] += 1
+    } senao {
+        contagem[palavra] = 1
+    }
+    i += 1
+}
+escreva(contagem)
